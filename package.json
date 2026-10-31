@@ -1,0 +1,11 @@
+{
+  "name": "wetube-cine-clone",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Một chiếc rạp, cả hội cùng xem. Rạp phim 3D với 100 ghế, bình chọn YouTube và trò chuyện cùng bạn bè.",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "serve": "npx serve ."
+  }
+}

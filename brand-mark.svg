@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <!-- Deep Cosmic Obsidian & Indigo Base Background -->
+    <linearGradient id="cosmicBg" x1="16" y1="12" x2="112" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0c0d24"/>
+      <stop offset="50%" stop-color="#14133b"/>
+      <stop offset="100%" stop-color="#090a18"/>
+    </linearGradient>
+
+    <!-- Glowing Cyber Violet & Electric Blue Rim Border -->
+    <linearGradient id="borderGlow" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="40%" stop-color="#6366F1"/>
+      <stop offset="75%" stop-color="#A855F7"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+
+    <!-- YouTube Screen Pill Gradient (Mysterious Blue to Deep Purple) -->
+    <linearGradient id="ytBadgeGrad" x1="20" y1="24" x2="108" y2="82" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1D4ED8"/>
+      <stop offset="30%" stop-color="#2563EB"/>
+      <stop offset="65%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#9333EA"/>
+    </linearGradient>
+
+    <!-- Top Gloss Reflection on YouTube Screen -->
+    <linearGradient id="glassGloss" x1="64" y1="24" x2="64" y2="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.02"/>
+    </linearGradient>
+
+    <!-- YouTube Play Triangle Gradient (Luminous Diamond White-Cyan) -->
+    <linearGradient id="playTriGrad" x1="48" y1="42" x2="78" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="45%" stop-color="#E0F2FE"/>
+      <stop offset="100%" stop-color="#7DD3FC"/>
+    </linearGradient>
+
+    <!-- Stylized Signature "Hanzu" Gradient (Cyan -> Electric Blue -> Violet -> Neon Pink) -->
+    <linearGradient id="sigGrad" x1="16" y1="36" x2="116" y2="102" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="35%" stop-color="#818CF8"/>
+      <stop offset="70%" stop-color="#C084FC"/>
+      <stop offset="100%" stop-color="#F472B6"/>
+    </linearGradient>
+
+    <!-- Signature Glow Shadow -->
+    <filter id="neonSigGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3.5" flood-color="#8B5CF6" flood-opacity="0.75"/>
+    </filter>
+
+    <!-- Play Button Glow -->
+    <filter id="playGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#38BDF8" flood-opacity="0.8"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="8" flood-color="#A855F7" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Ambient Outer Glow -->
+  <rect x="8" y="8" width="112" height="112" rx="30" fill="none" stroke="url(#borderGlow)" stroke-width="6" opacity="0.25" filter="blur(8px)"/>
+
+  <!-- Main Container Squircle with Cosmic Glass Vibe -->
+  <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#cosmicBg)" stroke="url(#borderGlow)" stroke-width="2.5"/>
+
+  <!-- Top Glass Sheen -->
+  <path d="M10 32 C10 18 18 10 32 10 L96 10 C110 10 118 18 118 32 L118 48 C80 38 48 38 10 52 Z" fill="#FFFFFF" opacity="0.06"/>
+
+  <!-- Harmonic YouTube Screen Emblem in Violet & Blue -->
+  <rect x="20" y="24" width="88" height="58" rx="18" fill="url(#ytBadgeGrad)" stroke="rgba(255, 255, 255, 0.22)" stroke-width="1.2"/>
+  <rect x="22" y="26" width="84" height="26" rx="14" fill="url(#glassGloss)"/>
+
+  <!-- YouTube Play Triangle Centerpiece -->
+  <polygon points="52,41 74,53 52,65" fill="url(#playTriGrad)" filter="url(#playGlow)"/>
+
+  <!-- Cinema Star Glints -->
+  <path d="M96 22 Q99 22 99 18 Q99 22 102 22 Q99 22 99 26 Q99 22 96 22 Z" fill="#67E8F9" filter="drop-shadow(0 0 4px #38BDF8)"/>
+  <circle cx="28" cy="74" r="1.5" fill="#C084FC" opacity="0.8"/>
+  <circle cx="102" cy="72" r="1.5" fill="#38BDF8" opacity="0.8"/>
+
+  <!-- Stylized Signature "Hanzu" Calligraphy Stroke Overlay -->
+  <!-- Master signature ligature: H -> a -> n -> z -> u with flourishing loops & underline -->
+  <g filter="url(#neonSigGlow)">
+    <!-- Letter 'H': Left flourishing loop & ascending whip -->
+    <path d="M22 66 C18 52, 22 38, 28 35 C33 32, 36 40, 34 52 L31 78 C30 83, 28 86, 26 86 C24 86, 25 80, 27 75" 
+          fill="none" stroke="url(#sigGrad)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- 'H' cross-tie & right stem, transitioning into 'a' -->
+    <path d="M26 56 C31 52, 38 50, 42 44 L38 74 C38 78, 41 80, 45 77 C48 74, 49 68, 51 64" 
+          fill="none" stroke="url(#sigGrad)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- Letter 'a': looping teardrop & stem -->
+    <path d="M57 66 C53 62, 48 65, 48 70 C48 76, 54 78, 58 74 L58 64 L58 76 C58 78, 61 78, 64 74" 
+          fill="none" stroke="url(#sigGrad)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- Letter 'n': double arch cursive stroke -->
+    <path d="M64 74 L65 65 C67 62, 70 61, 72 64 L71 75 C72 71, 76 61, 80 64 L79 76 C79 78, 81 78, 83 74" 
+          fill="none" stroke="url(#sigGrad)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Letter 'z': sharp stylistic hook and dramatic descending loop -->
+    <path d="M83 66 C87 63, 91 63, 92 65 C92 67, 86 71, 85 75 C87 75, 91 74, 91 76 C91 80, 84 88, 82 93 C80 97, 84 98, 87 93 C90 88, 91 82, 93 75" 
+          fill="none" stroke="url(#sigGrad)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Letter 'u': graceful cup -->
+    <path d="M94 69 L94 74 C94 77, 98 78, 100 74 L101 68 L101 76" 
+          fill="none" stroke="url(#sigGrad)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Dynamic Signature Flourish Underline (Nét vuốt ký bay bổng) -->
+    <path d="M102 75 C108 72, 114 78, 108 84 C95 96, 58 104, 25 97 C16 94, 15 88, 22 84 C32 79, 52 83, 72 84" 
+          fill="none" stroke="url(#sigGrad)" stroke-width="3" stroke-linecap="round"/>
+  </g>
+</svg>
