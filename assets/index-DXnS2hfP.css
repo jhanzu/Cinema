@@ -1,0 +1,2091 @@
+/* ==========================================================================
+   Hanzu Cinema — Rạp phim của chúng mình
+   Full Stylesheet (3D Cinema 100 Seats, Ambilight, Queue Voting, Live Chat)
+   Mysterious Purple & Electric Blue Cinematic Theme with 60 FPS Engine
+   ========================================================================== */
+
+@property --ambilight-1 {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #3B82F6;
+}
+
+@property --ambilight-2 {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #8B5CF6;
+}
+
+:root {
+  /* Deep Cosmic Obsidian base with mysterious purple/blue undertones */
+  --bg-primary: #0a0b16;
+  --bg-secondary: #111326;
+  --bg-tertiary: #191b36;
+  --bg-card: rgba(21, 23, 48, 0.72);
+  --bg-glass: rgba(14, 16, 36, 0.84);
+  --border-subtle: rgba(139, 92, 246, 0.16);
+  --border-focus: rgba(168, 85, 247, 0.65);
+  --border-highlight: rgba(96, 165, 250, 0.35);
+
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+
+  /* Harmonious Purple & Blue Spectrum */
+  --accent-purple: #8B5CF6;
+  --accent-violet: #A855F7;
+  --accent-fuchsia: #C084FC;
+  --accent-blue: #3B82F6;
+  --accent-indigo: #6366F1;
+  --accent-cyan: #38BDF8;
+  --accent-gold: #F59E0B;
+  --accent-emerald: #10B981;
+
+  /* Aliased to purple/blue for component safety */
+  --accent-red: #8B5CF6;
+  --accent-crimson: #3B82F6;
+
+  /* Brand Signature Gradient */
+  --brand-gradient: linear-gradient(135deg, #2563EB 0%, #7C3AED 55%, #A855F7 100%);
+  --brand-gradient-hover: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 55%, #C084FC 100%);
+  --brand-glow: 0 0 24px rgba(139, 92, 246, 0.4), 0 0 45px rgba(37, 99, 235, 0.25);
+
+  /* Fallback and dynamic ambilight defaults */
+  --ambilight-1: #3B82F6;
+  --ambilight-2: #8B5CF6;
+  --cinema-dim: 0.35;
+  --sidebar-width: 390px;
+  --header-height: 58px;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-sig: 'Caveat', 'Brush Script MT', 'Segoe Script', cursive, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  overflow: hidden;
+}
+
+input, textarea, button {
+  font-family: inherit;
+  user-select: text;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* ==========================================================================
+   App Layout
+   ========================================================================== */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  background: radial-gradient(circle at 35% 20%, rgba(40, 42, 40, 0.45), #0b0c0b 75%);
+}
+
+/* Top Navigation Header */
+.top-navbar {
+  height: var(--header-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  background: rgba(10, 11, 23, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border-subtle);
+  z-index: 40;
+  flex-shrink: 0;
+}
+
+.brand-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.45), 0 0 8px rgba(56, 189, 248, 0.3);
+  flex-shrink: 0;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.brand-logo:hover {
+  transform: scale(1.06) rotate(-2deg);
+  box-shadow: 0 0 26px rgba(168, 85, 247, 0.6), 0 0 12px rgba(56, 189, 248, 0.45);
+}
+
+.brand-titles {
+  display: flex;
+  flex-direction: column;
+}
+
+.brand-name {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.brand-name .brand-sig {
+  font-family: var(--font-sig);
+  font-size: 1.7rem;
+  font-weight: 700;
+  line-height: 1;
+  background: linear-gradient(135deg, #38BDF8 0%, #818CF8 35%, #C084FC 75%, #F472B6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.45));
+  letter-spacing: 0.02em;
+  transform: rotate(-3.5deg);
+  display: inline-block;
+  padding-right: 3px;
+}
+
+.brand-name .brand-cine {
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #DDD6FE;
+  margin-right: 2px;
+}
+
+.brand-name span.cine-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: linear-gradient(135deg, #2563EB 0%, #7C3AED 50%, #C084FC 100%);
+  color: #fff;
+  letter-spacing: 0.05em;
+  box-shadow: 0 0 12px rgba(124, 58, 237, 0.5);
+}
+
+.brand-tagline {
+  font-size: 0.73rem;
+  color: var(--text-secondary);
+}
+
+/* Top Center Camera & Mode Switcher */
+.camera-mode-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(18, 20, 42, 0.65);
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+}
+
+.mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mode-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mode-btn.active {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.32), rgba(124, 58, 237, 0.38));
+  color: #fff;
+  border: 1px solid rgba(168, 85, 247, 0.55);
+  box-shadow: 0 2px 14px rgba(124, 58, 237, 0.35), 0 0 8px rgba(56, 189, 248, 0.2);
+}
+
+/* Top Right Actions */
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #34D399;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10B981;
+  box-shadow: 0 0 8px #10B981;
+  animation: pulseDot 1.6s infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.65; }
+}
+
+.my-seat-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.38);
+  color: #FBBF24;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.my-seat-pill:hover {
+  background: rgba(245, 158, 11, 0.24);
+  transform: translateY(-1px);
+}
+
+/* 60 FPS Real-Time Performance Monitor Badge */
+.fps-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #34D399;
+  font-size: 0.74rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+.fps-pill .fps-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10B981;
+  box-shadow: 0 0 8px #10B981;
+  animation: fpsPulse 2s infinite ease-in-out;
+}
+@keyframes fpsPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+.fps-pill.fps-warn {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #FBBF24;
+}
+.fps-pill.fps-warn .fps-dot {
+  background: #F59E0B;
+  box-shadow: 0 0 8px #F59E0B;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 11px;
+  border-radius: 9px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.icon-btn.active {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.5);
+  color: #C4B5FD;
+}
+
+/* ==========================================================================
+   Main Content Split: 3D Cinema Viewport + Right Sidebar
+   ========================================================================== */
+.main-workspace {
+  display: flex;
+  flex: 1;
+  height: calc(100vh - var(--header-height));
+  overflow: hidden;
+  position: relative;
+}
+
+/* Left: 3D Cinema Viewport */
+.cinema-viewport {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: radial-gradient(ellipse at 50% 30%, #151336 0%, #090a18 70%, #04050d 100%);
+  cursor: grab;
+  touch-action: none;
+}
+
+.cinema-viewport:active,
+body.is-dragging-camera .cinema-viewport {
+  cursor: grabbing;
+}
+
+/* Disable pointer events on iframes during drag so mouse events never get stuck */
+body.is-dragging-camera iframe,
+.cinema-viewport.is-dragging-camera iframe {
+  pointer-events: none !important;
+}
+
+/* Dynamic Ambilight Backdrop with Hardware-Accelerated Scale & Opacity */
+.ambilight-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background:
+    radial-gradient(ellipse 68% 44% at 50% 18%, var(--ambilight-1), transparent 72%),
+    radial-gradient(ellipse 55% 40% at 32% 26%, var(--ambilight-2), transparent 75%);
+  opacity: calc(1 - var(--cinema-dim));
+  filter: blur(46px);
+  will-change: transform, opacity;
+  animation: ambilightBreathe 7s ease-in-out infinite alternate;
+}
+
+@keyframes ambilightBreathe {
+  0% { transform: scale(1); opacity: calc((1 - var(--cinema-dim)) * 0.88); }
+  100% { transform: scale(1.04); opacity: calc(1 - var(--cinema-dim)); }
+}
+
+.cinema-darkness-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background: rgba(0, 0, 0, var(--cinema-dim));
+  transition: background 0.35s ease;
+}
+
+/* 3D Scene Container with Layout Isolation */
+.scene-3d-wrapper {
+  position: absolute;
+  inset: 0;
+  perspective: 1150px;
+  perspective-origin: 50% 42%;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  contain: layout;
+  will-change: transform;
+}
+
+.theater-world {
+  width: 1000px;
+  height: 700px;
+  position: relative;
+  transform-style: preserve-3d;
+  will-change: transform;
+  transform: translateZ(0);
+  transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.theater-world.dragging {
+  transition: none !important;
+}
+
+/* Cinema Ceiling & Side Acoustic Walls */
+.theater-ceiling {
+  display: none; /* Hide inverted ceiling plane that obstructed the top view and ambilight */
+}
+
+.theater-floor {
+  position: absolute;
+  width: 1240px;
+  height: 800px;
+  left: -120px;
+  top: 450px;
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(139, 92, 246, 0.22) 0%, rgba(37, 99, 235, 0.14) 45%, transparent 70%),
+    repeating-linear-gradient(
+      0deg,
+      rgba(168, 85, 247, 0.04) 0px,
+      rgba(168, 85, 247, 0.04) 1px,
+      transparent 1px,
+      transparent 50px
+    ),
+    linear-gradient(180deg, #0b0c1c 0%, #131530 40%, #070814 100%);
+  transform-origin: top center;
+  transform: translate3d(0, 0, -180px) rotateX(90deg);
+  border-radius: 18px;
+  border: 1px solid rgba(139, 92, 246, 0.14);
+  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.95);
+  pointer-events: none;
+}
+
+/* Aisle LED Strip Lights on Floor */
+.aisle-strip {
+  position: absolute;
+  top: 30px;
+  bottom: 30px;
+  width: 8px;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(56, 189, 248, 0.95) 0px,
+    rgba(168, 85, 247, 0.95) 18px,
+    transparent 18px,
+    transparent 48px
+  );
+  box-shadow: 0 0 16px rgba(139, 92, 246, 0.7), 0 0 6px rgba(56, 189, 248, 0.8);
+  border-radius: 4px;
+}
+.aisle-strip.left { left: 174px; }
+.aisle-strip.center { left: 607px; }
+.aisle-strip.right { left: 1040px; }
+
+/* ==========================================================================
+   Giant 3D Cinema Screen + YouTube Player Container (Facing Forward)
+   ========================================================================== */
+.screen-pedestal {
+  position: absolute;
+  width: 820px;
+  height: 460px;
+  left: 90px;
+  top: -60px;
+  transform: translateZ(-150px) rotateX(6deg);
+  transform-style: preserve-3d;
+}
+
+.screen-frame {
+  width: 100%;
+  height: 100%;
+  background: #000;
+  border-radius: 14px;
+  border: 4px solid #1e1b38;
+  box-shadow:
+    0 0 100px var(--ambilight-2),
+    0 0 50px var(--ambilight-1),
+    0 15px 120px rgba(0, 0, 0, 0.95),
+    inset 0 0 24px rgba(168, 85, 247, 0.15);
+  overflow: hidden;
+  position: relative;
+}
+
+.screen-curtain-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  background: linear-gradient(90deg, #0e1026, #1e1b4b 25%, #311042 50%, #1e1b4b 75%, #0e1026);
+  z-index: 6;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  font-size: 0.7rem;
+  color: #DDD6FE;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(139, 92, 246, 0.35);
+}
+
+.yt-player-mount {
+  width: 100%;
+  height: calc(100% - 28px);
+  margin-top: 28px;
+  position: relative;
+  background: #050505;
+}
+
+.yt-player-mount iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+/* Screen Reflection Stage Apron */
+.stage-apron {
+  position: absolute;
+  width: 860px;
+  height: 65px;
+  left: -20px;
+  bottom: -40px;
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.28), rgba(12, 14, 32, 0.96));
+  transform: rotateX(72deg);
+  border-radius: 12px;
+  border-top: 2px solid rgba(168, 85, 247, 0.35);
+  box-shadow: 0 -10px 45px var(--ambilight-2), 0 -5px 25px var(--ambilight-1);
+}
+
+/* ==========================================================================
+   100 Cinema Seats Grid inside 3D World (Facing the Screen)
+   ========================================================================== */
+.seats-auditorium-3d {
+  position: absolute;
+  width: 920px;
+  height: 540px;
+  left: 40px;
+  top: 379px;
+  transform-style: preserve-3d;
+}
+
+.seat-3d-node {
+  position: absolute;
+  width: 54px;
+  height: 56px;
+  transform-style: preserve-3d;
+  cursor: pointer;
+  transition: transform 0.22s ease, filter 0.2s ease;
+  contain: layout style;
+}
+
+.seat-3d-node:hover {
+  filter: brightness(1.3);
+}
+
+/* ==========================================================================
+   Complete 3D Volumetric Cinema Chair Model (Depth, Faces, Cushions, Pedestal)
+   ========================================================================== */
+.chair-3d-model {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  pointer-events: none;
+  transition: transform 0.22s ease, filter 0.22s ease;
+}
+
+/* 1. Volumetric 3D Backrest Box (Depth: 10px) */
+.chair-back-box {
+  position: absolute;
+  bottom: 12px;
+  left: 5px;
+  width: 44px;
+  height: 44px;
+  transform-style: preserve-3d;
+  z-index: 2;
+}
+
+.cb-face,
+.cc-face,
+.ca-face {
+  position: absolute;
+  box-sizing: border-box;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Rear hard-shell casing facing the viewer in Orbit mode */
+.cb-face.cb-back {
+  inset: 0;
+  transform: translateZ(5px);
+  background: linear-gradient(180deg, #262926 0%, #171817 60%, #0f100f 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9px 9px 3px 3px;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 5px;
+}
+
+/* Front plush cushion facing the cinema screen */
+.cb-face.cb-front {
+  inset: 0;
+  transform: rotateY(180deg) translateZ(5px);
+  background: linear-gradient(180deg, #303430 0%, #202220 60%, #151615 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9px 9px 3px 3px;
+  overflow: hidden;
+}
+
+/* Upholstery vertical stitching on front cushion */
+.cb-stitch {
+  position: absolute;
+  top: 6px;
+  bottom: 4px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow: 1px 0 0 rgba(0, 0, 0, 0.4);
+}
+.cb-stitch.left { left: 13px; }
+.cb-stitch.right { right: 13px; }
+
+/* Top headrest curved surface (thickness 10px) */
+.cb-face.cb-top {
+  top: -5px;
+  left: 0;
+  width: 44px;
+  height: 10px;
+  transform: rotateX(90deg);
+  background: linear-gradient(90deg, #1d1f1d 0%, #2e312e 50%, #1d1f1d 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+/* Left & Right side edges of backrest (thickness 10px) */
+.cb-face.cb-side.left {
+  top: 0;
+  left: -5px;
+  width: 10px;
+  height: 44px;
+  transform: rotateY(-90deg);
+  background: linear-gradient(180deg, #222422 0%, #121312 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.cb-face.cb-side.right {
+  top: 0;
+  right: -5px;
+  width: 10px;
+  height: 44px;
+  transform: rotateY(90deg);
+  background: linear-gradient(180deg, #222422 0%, #121312 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* 2. Volumetric 3D Seat Cushion Box (Thickness: 8px, Depth: 26px) */
+.chair-cushion-box {
+  position: absolute;
+  bottom: 12px;
+  left: 6px;
+  width: 42px;
+  height: 8px;
+  transform-style: preserve-3d;
+  z-index: 1;
+}
+
+.cc-face {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+/* Top seating surface */
+.cc-face.cc-top {
+  top: -13px;
+  left: 0;
+  width: 42px;
+  height: 26px;
+  transform: translateY(-4px) rotateX(90deg);
+  background: linear-gradient(180deg, #272a27 0%, #1a1b1a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.6);
+  position: relative;
+  overflow: hidden;
+}
+
+.cc-seam {
+  position: absolute;
+  top: 50%;
+  left: 6px;
+  right: 6px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Front cushion rim facing screen */
+.cc-face.cc-front {
+  top: 0;
+  left: 0;
+  width: 42px;
+  height: 8px;
+  transform: translateZ(-13px);
+  background: linear-gradient(180deg, #232623 0%, #131413 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0 0 3px 3px;
+}
+
+/* Bottom underside plate */
+.cc-face.cc-bottom {
+  top: -13px;
+  left: 0;
+  width: 42px;
+  height: 26px;
+  transform: translateY(4px) rotateX(-90deg);
+  background: #0e0f0e;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Side cushion walls */
+.cc-face.cc-side.left {
+  top: 0;
+  left: -13px;
+  width: 26px;
+  height: 8px;
+  transform: translateX(-8px) rotateY(-90deg);
+  background: #181a18;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.cc-face.cc-side.right {
+  top: 0;
+  right: -13px;
+  width: 26px;
+  height: 8px;
+  transform: translateX(8px) rotateY(90deg);
+  background: #181a18;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* 3. Volumetric 3D Armrests with 3D Cup Holders */
+.chair-armrest-box {
+  position: absolute;
+  bottom: 8px;
+  width: 6px;
+  height: 24px;
+  transform-style: preserve-3d;
+  z-index: 3;
+}
+.chair-armrest-box.left { left: 0px; }
+.chair-armrest-box.right { right: 0px; }
+
+.ca-face {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+/* Armrest top rail */
+.ca-face.ca-top {
+  top: -14px;
+  left: 0;
+  width: 6px;
+  height: 28px;
+  transform: translateY(-12px) rotateX(90deg);
+  background: linear-gradient(180deg, #303330 0%, #1c1e1c 100%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 2px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+.cup-holder-3d {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+/* Armrest front cap */
+.ca-face.ca-front {
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 24px;
+  transform: translateZ(-14px);
+  background: linear-gradient(180deg, #262926 0%, #151615 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+/* Outer side panel of armrest */
+.ca-face.ca-side.outer {
+  top: 0;
+  width: 28px;
+  height: 24px;
+  background: linear-gradient(180deg, #212421 0%, #131413 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.chair-armrest-box.left .ca-face.ca-side.outer {
+  left: -11px;
+  transform: translateX(-3px) rotateY(-90deg);
+}
+.chair-armrest-box.right .ca-face.ca-side.outer {
+  right: -11px;
+  transform: translateX(3px) rotateY(90deg);
+}
+
+/* 4. Volumetric 3D Pedestal Base & Floor Plate */
+.chair-pedestal-box {
+  position: absolute;
+  bottom: -15px;
+  left: 21px;
+  width: 12px;
+  height: 16px;
+  transform-style: preserve-3d;
+  z-index: 0;
+}
+
+.cp-stem {
+  width: 12px;
+  height: 16px;
+  background: linear-gradient(180deg, #272a27 0%, #121312 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.9);
+}
+
+.cp-foot {
+  position: absolute;
+  bottom: -1px;
+  left: -4px;
+  width: 20px;
+  height: 16px;
+  transform: rotateX(90deg);
+  background: #181918;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.95);
+}
+
+.seat-code-label {
+  font-size: 0.62rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: -0.02em;
+}
+
+/* VIP Rows E & F Gold Trim for 3D Chair Model */
+.seat-3d-node.vip-seat .cb-face.cb-back {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: linear-gradient(180deg, #3d321d 0%, #201a0e 100%);
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.28);
+}
+.seat-3d-node.vip-seat .cb-face.cb-front {
+  background: linear-gradient(180deg, #483b23 0%, #261f12 100%);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+.seat-3d-node.vip-seat .cc-face.cc-top {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: linear-gradient(180deg, #382e18 0%, #20190a 100%);
+}
+.seat-3d-node.vip-seat .seat-code-label {
+  color: #FBBF24;
+}
+.seat-3d-node.vip-seat .cup-holder-3d {
+  border-color: #F59E0B;
+}
+
+/* 3D Geometric Block Mannequin Sitting in Chair */
+.block-mannequin {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transform-style: preserve-3d;
+  z-index: 10;
+}
+
+.mannequin-nametag {
+  position: absolute;
+  top: -38px;
+  left: 50%;
+  transform: translateX(-50%) translateZ(26px);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  white-space: nowrap;
+  background: rgba(15, 18, 15, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--char-color);
+  box-shadow: 0 0 14px var(--char-color);
+  color: #fff;
+  z-index: 25;
+  letter-spacing: 0.02em;
+}
+
+.mannequin-nametag .mannequin-emoji {
+  font-size: 0.76rem;
+}
+
+.block-mannequin.is-me .mannequin-nametag {
+  border-color: #F59E0B;
+  box-shadow: 0 0 18px rgba(245, 158, 11, 0.9), inset 0 0 8px rgba(245, 158, 11, 0.3);
+  background: rgba(30, 20, 5, 0.95);
+  color: #FEF3C7;
+}
+
+/* 3D Head Box */
+.block-head-wrap {
+  position: absolute;
+  top: -14px;
+  left: 16px;
+  width: 22px;
+  height: 22px;
+  transform-style: preserve-3d;
+  z-index: 15;
+}
+
+.block-head {
+  width: 100%;
+  height: 100%;
+  border-radius: 5px;
+  background: linear-gradient(135deg, #f0cfb0 0%, #caa07c 100%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transform: translateZ(14px);
+  animation: mannequinIdle 4s ease-in-out infinite alternate;
+}
+
+@keyframes mannequinIdle {
+  0% { transform: translateZ(14px) rotateX(0deg); }
+  100% { transform: translateZ(14px) rotateX(-4deg); }
+}
+
+.block-head .block-face {
+  font-size: 0.85rem;
+  line-height: 1;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+}
+
+.block-glasses-3d {
+  position: absolute;
+  bottom: 4px;
+  left: 2px;
+  right: 2px;
+  height: 4px;
+  border-radius: 2px;
+  background: #111;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 1px;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+.block-glasses-3d::before {
+  content: '';
+  width: 7px;
+  height: 2.5px;
+  background: #06B6D4;
+  border-radius: 1px;
+  box-shadow: 0 0 3px #06B6D4;
+}
+.block-glasses-3d::after {
+  content: '';
+  width: 7px;
+  height: 2.5px;
+  background: #EF4444;
+  border-radius: 1px;
+  box-shadow: 0 0 3px #EF4444;
+}
+
+/* 3D Torso Box */
+.block-torso {
+  position: absolute;
+  top: 8px;
+  left: 15px;
+  width: 24px;
+  height: 20px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--char-color) 0%, rgba(15, 17, 15, 0.85) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.7);
+  transform: translateZ(10px);
+  z-index: 12;
+}
+
+.block-torso-front {
+  position: absolute;
+  inset: 2px;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, transparent 60%);
+}
+
+/* 3D Arms resting on Armrests */
+.block-arm {
+  position: absolute;
+  top: 9px;
+  width: 5px;
+  height: 18px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--char-color) 0%, #1e201e 100%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  z-index: 13;
+}
+.block-arm.left {
+  left: 9px;
+  transform: translateZ(9px) rotateX(16deg) rotateZ(6deg);
+}
+.block-arm.right {
+  right: 9px;
+  transform: translateZ(9px) rotateX(16deg) rotateZ(-6deg);
+}
+
+/* 3D Legs bent sitting on cushion */
+.block-leg {
+  position: absolute;
+  top: 27px;
+  width: 7px;
+  height: 18px;
+  transform-style: preserve-3d;
+  z-index: 11;
+}
+.block-leg.left { left: 17px; }
+.block-leg.right { right: 17px; }
+
+.block-leg .leg-thigh {
+  width: 7px;
+  height: 13px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #222522 0%, #141614 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transform-origin: top center;
+  transform: rotateX(-85deg);
+}
+
+.block-leg .leg-shin {
+  position: absolute;
+  top: 11px;
+  left: 0;
+  width: 7px;
+  height: 11px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #181a18 0%, #0c0e0c 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transform-origin: top center;
+  transform: rotateX(85deg);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.8);
+}
+
+/* End 3D Mannequin & Chair Model styles */
+
+/* Speech Bubble Floating Directly Above Seat in 3D Space */
+.seat-speech-bubble {
+  position: absolute;
+  bottom: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.96);
+  color: #111211;
+  padding: 5px 10px;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  border: 2px solid var(--accent-red);
+  z-index: 20;
+  animation: bubblePopIn 0.25s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+.seat-speech-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 6px 6px 0;
+  border-style: solid;
+  border-color: #fff transparent transparent;
+}
+
+@keyframes bubblePopIn {
+  0% { transform: translateX(-50%) scale(0.4) translateY(12px); opacity: 0; }
+  100% { transform: translateX(-50%) scale(1) translateY(0); opacity: 1; }
+}
+
+/* ==========================================================================
+   3D Reaction Particles Floating From Seats
+   ========================================================================== */
+.reaction-particle {
+  position: absolute;
+  font-size: 1.5rem;
+  pointer-events: none;
+  z-index: 30;
+  animation: flyUpReaction 2.2s cubic-bezier(0.2, 0.8, 0.4, 1) forwards;
+}
+
+@keyframes flyUpReaction {
+  0% {
+    transform: translate(-50%, 0) scale(0.6) rotate(0deg);
+    opacity: 1;
+  }
+  50% {
+    transform: translate(calc(-50% + var(--drift-x, 18px)), -95px) scale(1.25) rotate(12deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--drift-x, -15px)), -190px) scale(0.85) rotate(-12deg);
+    opacity: 0;
+  }
+}
+
+/* ==========================================================================
+   Floating HUD Overlays inside Cinema Viewport
+   ========================================================================== */
+.viewport-hud-top {
+  position: relative;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  pointer-events: none;
+}
+
+.viewport-hud-top > * {
+  pointer-events: auto;
+}
+
+.now-playing-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-radius: 14px;
+  background: rgba(17, 18, 17, 0.85);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border-subtle);
+  max-width: 480px;
+}
+
+.np-badge {
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.28), rgba(124, 58, 237, 0.32));
+  color: #DDD6FE;
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+}
+
+.np-info {
+  overflow: hidden;
+}
+
+.np-title {
+  font-size: 0.84rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.np-meta {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.camera-hint-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 13px;
+  border-radius: 12px;
+  background: rgba(14, 16, 36, 0.82);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* Bottom Dock inside Cinema Viewport */
+.viewport-hud-bottom {
+  position: relative;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  background: linear-gradient(180deg, transparent, rgba(8, 9, 20, 0.95) 45%);
+  pointer-events: none;
+}
+
+.viewport-hud-bottom > * {
+  pointer-events: auto;
+}
+
+.player-controls-dock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 14px;
+  background: rgba(15, 17, 38, 0.88);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
+.ctrl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 11px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.ctrl-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.ctrl-btn.primary {
+  background: linear-gradient(135deg, #2563EB 0%, #7C3AED 100%);
+  color: #fff;
+  box-shadow: 0 0 14px rgba(124, 58, 237, 0.45);
+}
+
+.ctrl-btn.primary:hover {
+  background: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
+  box-shadow: 0 0 18px rgba(139, 92, 246, 0.6);
+}
+
+.ctrl-btn.vote-skip {
+  background: rgba(139, 92, 246, 0.16);
+  border: 1px solid rgba(168, 85, 247, 0.38);
+  color: #DDD6FE;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ctrl-btn.vote-skip:hover:not(:disabled) {
+  background: rgba(139, 92, 246, 0.28);
+  border-color: rgba(168, 85, 247, 0.65);
+  color: #fff;
+  box-shadow: 0 0 14px rgba(139, 92, 246, 0.4);
+}
+
+.ctrl-btn.vote-skip.voted {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.35), rgba(124, 58, 237, 0.45));
+  border-color: #A855F7;
+  color: #fff;
+  box-shadow: 0 0 14px rgba(124, 58, 237, 0.5);
+}
+
+.ctrl-btn.vote-skip:disabled,
+.ctrl-btn.vote-skip.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: var(--text-muted) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.ctrl-btn.vote-skip .skip-badge.empty {
+  font-size: 0.68rem;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  font-weight: 600;
+  display: inline-block;
+}
+
+.volume-slider {
+  width: 75px;
+  accent-color: #8B5CF6;
+  cursor: pointer;
+}
+
+/* Reaction Cannon Dock */
+.reaction-dock {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 14px;
+  background: rgba(24, 25, 24, 0.88);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-subtle);
+}
+
+.react-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 1.15rem;
+  cursor: pointer;
+  transition: transform 0.14s ease, background 0.14s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.react-btn:hover {
+  transform: translateY(-3px) scale(1.12);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.react-btn:active {
+  transform: scale(0.92);
+}
+
+/* ==========================================================================
+   Right Sidebar: Voting Queue, Live Chat, Audience List
+   ========================================================================== */
+.right-sidebar {
+  width: var(--sidebar-width);
+  height: 100%;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  z-index: 30;
+  flex-shrink: 0;
+}
+
+.sidebar-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 8px;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.22);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.tab-trigger {
+  padding: 8px 6px;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.18s;
+}
+
+.tab-trigger:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tab-trigger.active {
+  background: var(--bg-tertiary);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.tab-badge {
+  padding: 1px 6px;
+  border-radius: 99px;
+  font-size: 0.68rem;
+  background: rgba(139, 92, 246, 0.25);
+  color: #C084FC;
+}
+
+.sidebar-panel {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.sidebar-panel.active {
+  display: flex;
+}
+
+/* ==========================================================================
+   Tab 1: YouTube Voting Queue
+   ========================================================================== */
+.add-video-box {
+  padding: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.text-input {
+  flex: 1;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.text-input:focus {
+  border-color: #8B5CF6;
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.35);
+}
+
+.btn-submit {
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(135deg, #2563EB 0%, #7C3AED 50%, #A855F7 100%);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 0 14px rgba(124, 58, 237, 0.45);
+  transition: all 0.2s;
+}
+
+.btn-submit:hover {
+  background: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 50%, #C084FC 100%);
+  box-shadow: 0 0 18px rgba(139, 92, 246, 0.65);
+}
+
+.preset-chips {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.preset-chip {
+  padding: 4px 9px;
+  border-radius: 99px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.preset-chip:hover {
+  color: #fff;
+  border-color: rgba(168, 85, 247, 0.55);
+  background: rgba(139, 92, 246, 0.16);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.35);
+}
+
+.queue-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.queue-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px;
+  border-radius: 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.queue-card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.queue-card.top-rank {
+  border-color: rgba(245, 158, 11, 0.45);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(34, 36, 34, 0.95));
+}
+
+.queue-thumb-wrap {
+  position: relative;
+  width: 76px;
+  height: 44px;
+  border-radius: 7px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #000;
+}
+
+.queue-thumb-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rank-tag {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.82);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.queue-card.top-rank .rank-tag {
+  background: var(--accent-gold);
+  color: #111;
+}
+
+.queue-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-sub {
+  font-size: 0.69rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.queue-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.vote-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  padding: 5px 8px;
+  border-radius: 9px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.16s;
+}
+
+.vote-btn:hover {
+  border-color: rgba(168, 85, 247, 0.5);
+  color: #fff;
+}
+
+.vote-btn.voted {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.28), rgba(124, 58, 237, 0.35));
+  border-color: #A855F7;
+  color: #DDD6FE;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.35);
+}
+
+.play-now-mini {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+.play-now-mini:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+/* ==========================================================================
+   Tab 2: Live Theater Chat
+   ========================================================================== */
+.chat-messages-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  animation: fadeInMsg 0.2s ease;
+}
+
+@keyframes fadeInMsg {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.chat-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.chat-bubble-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-header-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.chat-author {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.chat-seat-tag {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgba(245, 158, 11, 0.16);
+  color: #FBBF24;
+  font-size: 0.64rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chat-seat-tag:hover {
+  background: rgba(245, 158, 11, 0.35);
+  transform: scale(1.05);
+}
+
+.chat-time {
+  font-size: 0.64rem;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.chat-text {
+  padding: 8px 11px;
+  border-radius: 0 11px 11px 11px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.81rem;
+  line-height: 1.42;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.chat-msg.is-me .chat-text {
+  background: rgba(124, 58, 237, 0.22);
+  border-color: rgba(168, 85, 247, 0.45);
+  box-shadow: 0 2px 10px rgba(124, 58, 237, 0.15);
+}
+
+.chat-system-notice {
+  align-self: center;
+  padding: 4px 11px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.chat-composer {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-subtle);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* ==========================================================================
+   Tab 3: Audience & 2D Seat Map Overview
+   ========================================================================== */
+.seatmap-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mini-screen-indicator {
+  width: 85%;
+  margin: 4px auto 8px;
+  height: 18px;
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 78, 69, 0.45), transparent);
+  border-top: 2px solid var(--accent-red);
+  text-align: center;
+  font-size: 0.64rem;
+  font-weight: 800;
+  color: var(--text-secondary);
+  letter-spacing: 0.14em;
+  line-height: 22px;
+}
+
+.seat-grid-2d {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 4px;
+}
+
+.seat-cell-2d {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 0.62rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.seat-cell-2d:hover {
+  transform: scale(1.12);
+  border-color: #fff;
+  color: #fff;
+}
+
+.seat-cell-2d.vip {
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.seat-cell-2d.occupied {
+  background: rgba(139, 92, 246, 0.28);
+  border-color: rgba(139, 92, 250, 0.6);
+  color: #DDD6FE;
+}
+
+.seat-cell-2d.mine {
+  background: var(--accent-gold);
+  border-color: #FEF08A;
+  color: #111;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+}
+
+.seat-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.audience-roster {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.roster-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.78rem;
+}
+
+/* ==========================================================================
+   Modals (Profile / Avatar Customizer & Share Room)
+   ========================================================================== */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  z-index: 100;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.modal-backdrop.open {
+  display: flex;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.85);
+  animation: modalScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalScaleIn {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.modal-title {
+  font-size: 1.02rem;
+  font-weight: 800;
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin: 10px 0 16px;
+}
+
+.emoji-choice {
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-tertiary);
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.emoji-choice:hover {
+  transform: scale(1.08);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.emoji-choice.selected {
+  border-color: #8B5CF6;
+  background: rgba(139, 92, 246, 0.25);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.5);
+}
+
+/* Toast Notification */
+.toast-container {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast-item {
+  padding: 9px 16px;
+  border-radius: 99px;
+  background: rgba(14, 16, 36, 0.95);
+  border: 1px solid rgba(139, 92, 246, 0.55);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 16px rgba(139, 92, 246, 0.35);
+  animation: fadeInMsg 0.2s ease;
+}
+
+/* ==========================================================================
+   Responsive Adaptations for Tablets & Mobile Screens
+   ========================================================================== */
+@media (max-width: 960px) {
+  .main-workspace {
+    flex-direction: column;
+  }
+  .right-sidebar {
+    width: 100%;
+    height: 46%;
+    border-left: none;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .top-navbar {
+    padding: 0 10px;
+    gap: 8px;
+  }
+  .brand-tagline, .camera-hint-pill {
+    display: none;
+  }
+  .camera-mode-bar {
+    padding: 2px;
+    gap: 2px;
+  }
+  .mode-btn {
+    padding: 5px 8px;
+    font-size: 0.72rem;
+  }
+  .nav-actions {
+    gap: 6px;
+  }
+  .my-seat-pill {
+    padding: 5px 8px;
+    font-size: 0.74rem;
+  }
+  #btnShareRoom {
+    padding: 0 8px;
+  }
+  .viewport-hud-bottom {
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .player-controls-dock {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+  .reaction-dock {
+    padding: 4px 8px;
+    gap: 4px;
+  }
+  .react-btn {
+    width: 30px;
+    height: 30px;
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .top-navbar {
+    height: auto;
+    flex-wrap: wrap;
+    padding: 8px 10px;
+  }
+  .brand-group {
+    order: 1;
+  }
+  .nav-actions {
+    order: 2;
+  }
+  .camera-mode-bar {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    margin-top: 6px;
+  }
+  .main-workspace {
+    height: calc(100vh - 96px);
+  }
+  .now-playing-card {
+    max-width: calc(100vw - 32px);
+  }
+  .volume-slider {
+    width: 50px;
+  }
+}

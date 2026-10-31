@@ -1,10 +1,20 @@
+/**
+ * Hanzu Cinema — Real-Time Multi-User Cinema Server
+ * Zero-dependency High-Performance HTTP + RFC 6455 WebSocket Hub
+ * Allows multiple devices (phones, tablets, PCs on LAN/Internet) to connect,
+ * sit in 3D seats, chat, vote, sync playback, and skip videos together.
+ */
+
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const os = require('os');
 
 const PORT = process.env.PORT || 8080;
 const ROOT_DIR = __dirname;
 
+// MIME Types Map
 const MIME_TYPES = {
   '.html': 'text/html; charset=UTF-8',
   '.css': 'text/css; charset=UTF-8',
@@ -14,14 +24,198 @@ const MIME_TYPES = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
-  '.ico': 'image/x-icon'
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
+  '.ttf': 'font/ttf'
 };
 
+// Initial Preset Queue
+const INITIAL_QUEUE = [
+  {
+    id: 'q-1',
+    videoId: '5qap5aO4i9A',
+    title: 'Synthwave Radio - Chill Synth / Retro Music',
+    channel: 'Lofi Girl Synthwave',
+    addedBy: 'Minh Anh (E4)',
+    votes: 5,
+    ambilight: ['#38BDF8', '#8B5CF6']
+  },
+  {
+    id: 'q-2',
+    videoId: 'rUxyKA_-grg',
+    title: 'Sleepy Fish - Chillhop Essentials Night Session',
+    channel: 'Chillhop Music',
+    addedBy: 'Hải Đăng (F7)',
+    votes: 3,
+    ambilight: ['#06B6D4', '#3B82F6']
+  },
+  {
+    id: 'q-3',
+    videoId: 'n61ULEU7CO0',
+    title: 'Best of Ghibli Piano Medley - Soothing Anime Ost',
+    channel: 'Anime Piano Room',
+    addedBy: 'Bảo Ngọc (D5)',
+    votes: 2,
+    ambilight: ['#10B981', '#38BDF8']
+  },
+  {
+    id: 'q-4',
+    videoId: 'K4DyBUG242c',
+    title: 'Cartoon - On & On (feat. Daniel Levi) [NCS Release]',
+    channel: 'NoCopyrightSounds',
+    addedBy: 'Tuấn Kiệt (G3)',
+    votes: 1,
+    ambilight: ['#8B5CF6', '#38BDF8']
+  }
+];
+
+// Single Source of Truth for the Hanzu Cinema Room
+const roomState = {
+  code: 'rap-chung-minh',
+  currentVideo: {
+    videoId: 'jfKfPfyJRdk',
+    title: 'lofi hip hop radio - beats to relax/study to',
+    channel: 'Lofi Girl',
+    startedBy: 'Hệ thống rạp',
+    ambilight: ['#3B82F6', '#8B5CF6'],
+    isPlaying: true,
+    startTime: Date.now()
+  },
+  queue: [...INITIAL_QUEUE],
+  occupants: {}, // [userId]: { id, name, seat, emoji, color, isHost, joinedAt }
+  skipVotes: new Set(),
+  messages: [
+    {
+      id: 'sys-welcome',
+      type: 'system',
+      text: 'Chào mừng bạn đến với Hanzu Cinema — Rạp phim 3D 100 ghế!',
+      time: '00:00'
+    }
+  ]
+};
+
+// Connected WebSocket Clients: Map of wsClient -> { id, user, socket }
+const connectedClients = new Map();
+
+/**
+ * Get all available IPv4 network addresses (LAN / Wi-Fi)
+ */
+function getNetworkAddresses() {
+  const interfaces = os.networkInterfaces();
+  const addresses = [];
+  for (const name of Object.keys(interfaces)) {
+    for (const net of interfaces[name]) {
+      if (net.family === 'IPv4' && !net.internal) {
+        addresses.push({ name, address: net.address });
+      }
+    }
+  }
+  return addresses;
+}
+
+/**
+ * Find an available seat if user's preferred seat is already taken
+ */
+function assignAvailableSeat(preferredSeat, currentOccupants) {
+  const occupiedSeats = new Set(Object.values(currentOccupants).map((o) => o.seat));
+  if (preferredSeat && !occupiedSeats.has(preferredSeat)) {
+    return preferredSeat;
+  }
+  // Search standard prime rows (F, E, G, D, H, C, I, B, J, A)
+  const rows = ['F', 'E', 'G', 'D', 'H', 'C', 'I', 'B', 'J', 'A'];
+  for (const r of rows) {
+    for (let c = 5; c <= 10; c++) {
+      const code = `${r}${c}`;
+      if (!occupiedSeats.has(code)) return code;
+    }
+    for (let c = 4; c >= 1; c--) {
+      const code = `${r}${c}`;
+      if (!occupiedSeats.has(code)) return code;
+    }
+  }
+  return preferredSeat || 'E5';
+}
+
+/**
+ * Broadcast WebSocket packet to all connected clients (optionally excluding one)
+ */
+function broadcast(payload, excludeWs = null) {
+  const jsonStr = JSON.stringify(payload);
+  for (const [ws] of connectedClients) {
+    if (ws !== excludeWs) {
+      ws.send(jsonStr);
+    }
+  }
+}
+
+/**
+ * Advance queue to next video and broadcast to all users
+ */
+function advanceRoomQueue(reasonText) {
+  roomState.queue.sort((a, b) => b.votes - a.votes);
+  if (roomState.queue.length === 0) {
+    roomState.skipVotes.clear();
+    broadcast({
+      type: 'SKIP_VOTE_UPDATE',
+      votes: [],
+      required: 1,
+      isEmpty: true
+    });
+    return;
+  }
+  const nextVideo = roomState.queue.shift();
+  roomState.currentVideo = {
+    videoId: nextVideo.videoId,
+    title: nextVideo.title,
+    channel: nextVideo.channel || 'YouTube Cinema',
+    startedBy: nextVideo.addedBy || 'Khán giả',
+    ambilight: nextVideo.ambilight || ['#3B82F6', '#8B5CF6'],
+    isPlaying: true,
+    startTime: Date.now()
+  };
+  roomState.skipVotes.clear();
+
+  broadcast({
+    type: 'QUEUE_ADVANCE',
+    currentVideo: roomState.currentVideo,
+    queue: roomState.queue,
+    reason: reasonText
+  });
+}
+
+// =============================================================================
+// HTTP STATIC SERVER + REST API
+// =============================================================================
 const server = http.createServer((req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  let filePath = path.join(ROOT_DIR, decodeURIComponent(parsedUrl.pathname));
+  const pathname = decodeURIComponent(parsedUrl.pathname);
+
+  // API: Get Server & Network Info for Friends Invite Link
+  if (pathname === '/api/info') {
+    const netAddrs = getNetworkAddresses();
+    const primaryLan = netAddrs.find((a) => !a.name.toLowerCase().includes('vpn')) || netAddrs[0];
+    const lanUrl = primaryLan ? `http://${primaryLan.address}:${PORT}` : `http://localhost:${PORT}`;
+
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=UTF-8',
+      'Access-Control-Allow-Origin': '*'
+    });
+    return res.end(
+      JSON.stringify({
+        status: 'online',
+        cinemaName: 'Hanzu Cinema',
+        port: PORT,
+        localUrl: `http://localhost:${PORT}`,
+        lanUrl: lanUrl,
+        allLanUrls: netAddrs.map((a) => ({ name: a.name, url: `http://${a.address}:${PORT}` })),
+        occupantsCount: Object.keys(roomState.occupants).length
+      })
+    );
+  }
 
   // Security: Prevent path traversal outside root
+  let filePath = path.join(ROOT_DIR, pathname);
   if (!filePath.startsWith(ROOT_DIR)) {
     res.writeHead(403, { 'Content-Type': 'text/plain' });
     return res.end('403 Forbidden');
@@ -36,7 +230,7 @@ const server = http.createServer((req, res) => {
     if (err) {
       if (err.code === 'ENOENT') {
         res.writeHead(404, { 'Content-Type': 'text/html; charset=UTF-8' });
-        res.end('<h1>404 Not Found</h1><p>File không tồn tại trên máy chủ.</p>');
+        res.end('<h1>404 Not Found</h1><p>File không tồn tại trên máy chủ Hanzu Cinema.</p>');
       } else {
         res.writeHead(500, { 'Content-Type': 'text/plain' });
         res.end('500 Internal Server Error');
@@ -54,6 +248,410 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`\n🍿 wetube ciné server đang chạy tại: http://localhost:${PORT}\n`);
+// =============================================================================
+// RFC 6455 PURE NODE.JS WEBSOCKET HUB (ZERO DEPENDENCIES)
+// =============================================================================
+server.on('upgrade', (req, socket, head) => {
+  const pathname = new URL(req.url, `http://${req.headers.host || 'localhost'}`).pathname;
+  if (pathname !== '/ws' && pathname !== '/ws/') {
+    socket.destroy();
+    return;
+  }
+
+  const key = req.headers['sec-websocket-key'];
+  if (!key) {
+    socket.destroy();
+    return;
+  }
+
+  const acceptKey = crypto
+    .createHash('sha1')
+    .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
+    .digest('base64');
+
+  const responseHeaders = [
+    'HTTP/1.1 101 Switching Protocols',
+    'Upgrade: websocket',
+    'Connection: Upgrade',
+    `Sec-WebSocket-Accept: ${acceptKey}`,
+    '\r\n'
+  ];
+  socket.write(responseHeaders.join('\r\n'));
+
+  // Create lightweight WebSocket wrapper
+  const ws = {
+    socket,
+    id: 'conn-' + Math.random().toString(36).slice(2, 9),
+    userId: null,
+    send: (data) => {
+      if (socket.destroyed) return;
+      try {
+        const payload = Buffer.from(typeof data === 'string' ? data : JSON.stringify(data));
+        const len = payload.length;
+        let header;
+        if (len <= 125) {
+          header = Buffer.from([0x81, len]);
+        } else if (len <= 65535) {
+          header = Buffer.alloc(4);
+          header[0] = 0x81;
+          header[1] = 126;
+          header.writeUInt16BE(len, 2);
+        } else {
+          header = Buffer.alloc(10);
+          header[0] = 0x81;
+          header[1] = 127;
+          header.writeBigUInt64BE(BigInt(len), 2);
+        }
+        socket.write(Buffer.concat([header, payload]));
+      } catch (err) {}
+    }
+  };
+
+  connectedClients.set(ws, { id: ws.id, user: null, socket });
+
+  let buffer = Buffer.alloc(0);
+
+  socket.on('data', (chunk) => {
+    buffer = Buffer.concat([buffer, chunk]);
+
+    while (buffer.length >= 2) {
+      const byte0 = buffer[0];
+      const byte1 = buffer[1];
+      const opcode = byte0 & 0x0f;
+      const isMasked = (byte1 & 0x80) !== 0;
+      let payloadLen = byte1 & 0x7f;
+      let offset = 2;
+
+      if (payloadLen === 126) {
+        if (buffer.length < offset + 2) break;
+        payloadLen = buffer.readUInt16BE(offset);
+        offset += 2;
+      } else if (payloadLen === 127) {
+        if (buffer.length < offset + 8) break;
+        payloadLen = Number(buffer.readBigUInt64BE(offset));
+        offset += 8;
+      }
+
+      let mask = null;
+      if (isMasked) {
+        if (buffer.length < offset + 4) break;
+        mask = buffer.slice(offset, offset + 4);
+        offset += 4;
+      }
+
+      if (buffer.length < offset + payloadLen) break;
+
+      const payload = buffer.slice(offset, offset + payloadLen);
+      buffer = buffer.slice(offset + payloadLen);
+
+      if (opcode === 0x08) {
+        // Client close frame
+        socket.end();
+        handleClientDisconnect(ws);
+        return;
+      }
+      if (opcode === 0x09) {
+        // Ping -> Reply Pong
+        socket.write(Buffer.from([0x8a, 0x00]));
+        continue;
+      }
+      if (opcode === 0x0a) {
+        // Pong
+        continue;
+      }
+
+      if (mask) {
+        for (let i = 0; i < payload.length; i++) {
+          payload[i] ^= mask[i % 4];
+        }
+      }
+
+      const text = payload.toString('utf8');
+      try {
+        const msg = JSON.parse(text);
+        handleClientMessage(ws, msg);
+      } catch (e) {}
+    }
+  });
+
+  const onSocketCleanUp = () => {
+    handleClientDisconnect(ws);
+  };
+
+  socket.on('close', onSocketCleanUp);
+  socket.on('error', onSocketCleanUp);
+});
+
+// Heartbeat ping interval every 25s
+setInterval(() => {
+  for (const [ws] of connectedClients) {
+    if (!ws.socket.destroyed) {
+      try {
+        ws.socket.write(Buffer.from([0x89, 0x00])); // Ping frame
+      } catch (e) {}
+    }
+  }
+}, 25000);
+
+/**
+ * Handle incoming WebSocket messages from clients
+ */
+function handleClientMessage(ws, data) {
+  if (!data || !data.type) return;
+
+  switch (data.type) {
+    case 'INIT_USER': {
+      if (!data.user || !data.user.id) return;
+      const user = data.user;
+      ws.userId = user.id;
+
+      // Ensure no two people sit on the exact same seat
+      const finalSeat = assignAvailableSeat(user.seat, roomState.occupants);
+      user.seat = finalSeat;
+
+      roomState.occupants[user.id] = {
+        id: user.id,
+        name: user.name || 'Khán giả',
+        seat: finalSeat,
+        emoji: user.emoji || '😎',
+        color: user.color || '#3B82F6',
+        joinedAt: Date.now()
+      };
+
+      connectedClients.set(ws, { id: ws.id, user: roomState.occupants[user.id], socket: ws.socket });
+
+      // 1. Reply to connecting user with Full Room State
+      ws.send({
+        type: 'ROOM_SYNC',
+        assignedSeat: finalSeat,
+        currentVideo: roomState.currentVideo,
+        queue: roomState.queue,
+        occupants: roomState.occupants,
+        skipVotes: Array.from(roomState.skipVotes),
+        messages: roomState.messages.slice(-30)
+      });
+
+      // 2. Broadcast new viewer to all other connected clients
+      broadcast(
+        {
+          type: 'USER_JOINED',
+          user: roomState.occupants[user.id]
+        },
+        ws
+      );
+
+      // 3. Add system welcome message in chat
+      const sysNotice = {
+        id: 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+        type: 'system',
+        text: `👋 ${user.name} đã vào rạp Hanzu Cinema và ngồi ở ghế ${finalSeat}!`,
+        time: new Date().toTimeString().slice(0, 5)
+      };
+      roomState.messages.push(sysNotice);
+      if (roomState.messages.length > 80) roomState.messages.shift();
+      broadcast({ type: 'CHAT_MSG', msg: sysNotice });
+      break;
+    }
+
+    case 'SEAT_CHANGE': {
+      if (!ws.userId || !roomState.occupants[ws.userId]) return;
+      const newSeat = data.seat;
+      if (!newSeat) return;
+
+      // Check if seat is already occupied by someone else
+      const isTaken = Object.values(roomState.occupants).some(
+        (o) => o.seat === newSeat && o.id !== ws.userId
+      );
+      if (isTaken) {
+        ws.send({
+          type: 'SEAT_TAKEN_ERROR',
+          seat: newSeat,
+          message: `Ghế ${newSeat} đã có người ngồi!`
+        });
+        return;
+      }
+
+      roomState.occupants[ws.userId].seat = newSeat;
+      broadcast({
+        type: 'SEAT_CHANGE',
+        userId: ws.userId,
+        seat: newSeat,
+        user: roomState.occupants[ws.userId]
+      });
+      break;
+    }
+
+    case 'CHAT_MSG': {
+      if (!ws.userId || !roomState.occupants[ws.userId]) return;
+      const user = roomState.occupants[ws.userId];
+      const chatMsg = {
+        id: 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+        author: user.name,
+        seat: user.seat,
+        emoji: user.emoji,
+        color: user.color,
+        text: String(data.text || '').slice(0, 280),
+        time: new Date().toTimeString().slice(0, 5),
+        isMe: false
+      };
+      roomState.messages.push(chatMsg);
+      if (roomState.messages.length > 80) roomState.messages.shift();
+      broadcast({ type: 'CHAT_MSG', msg: chatMsg });
+      break;
+    }
+
+    case 'REACTION': {
+      if (!ws.userId || !roomState.occupants[ws.userId]) return;
+      const user = roomState.occupants[ws.userId];
+      broadcast({
+        type: 'REACTION',
+        seat: user.seat,
+        emoji: data.emoji || '🍿',
+        userId: user.id
+      });
+      break;
+    }
+
+    case 'ADD_QUEUE': {
+      if (!data.item || !data.item.videoId) return;
+      if (!roomState.queue.some((q) => q.id === data.item.id)) {
+        roomState.queue.push({ ...data.item });
+        broadcast({
+          type: 'QUEUE_UPDATE',
+          queue: roomState.queue
+        });
+      }
+      break;
+    }
+
+    case 'VOTE_QUEUE_ITEM': {
+      if (!data.itemId) return;
+      const item = roomState.queue.find((q) => q.id === data.itemId);
+      if (item) {
+        item.votes = (item.votes || 0) + 1;
+        roomState.queue.sort((a, b) => b.votes - a.votes);
+        broadcast({
+          type: 'QUEUE_UPDATE',
+          queue: roomState.queue
+        });
+      }
+      break;
+    }
+
+    case 'SKIP_VOTE': {
+      if (!ws.userId) return;
+      if (roomState.queue.length === 0) return; // Cannot vote skip if queue is empty
+
+      roomState.skipVotes.add(ws.userId);
+      const totalViewers = Object.keys(roomState.occupants).length || 1;
+      const rawThreshold = Math.floor(totalViewers * 0.3);
+      const required = Math.max(1, rawThreshold);
+
+      if (roomState.skipVotes.size >= required) {
+        const reason = rawThreshold < 1
+          ? 'Tự động qua bài (30% khán giả < 1 người)'
+          : `Đã đủ ${roomState.skipVotes.size}/${required} phiếu (30% khán giả)`;
+        advanceRoomQueue(reason);
+      } else {
+        broadcast({
+          type: 'SKIP_VOTE_UPDATE',
+          votes: Array.from(roomState.skipVotes),
+          required
+        });
+      }
+      break;
+    }
+
+    case 'SKIP_VOTE_REVOKE': {
+      if (!ws.userId) return;
+      roomState.skipVotes.delete(ws.userId);
+      const totalViewers = Object.keys(roomState.occupants).length || 1;
+      const required = Math.max(1, Math.floor(totalViewers * 0.3));
+      broadcast({
+        type: 'SKIP_VOTE_UPDATE',
+        votes: Array.from(roomState.skipVotes),
+        required
+      });
+      break;
+    }
+
+    case 'FORCE_PLAY_QUEUE': {
+      if (!data.itemId) return;
+      const idx = roomState.queue.findIndex((q) => q.id === data.itemId);
+      if (idx === -1) return;
+      const [picked] = roomState.queue.splice(idx, 1);
+      roomState.currentVideo = {
+        videoId: picked.videoId,
+        title: picked.title,
+        channel: picked.channel || 'YouTube Cinema',
+        startedBy: picked.addedBy || 'Khán giả',
+        ambilight: picked.ambilight || ['#3B82F6', '#8B5CF6'],
+        isPlaying: true,
+        startTime: Date.now()
+      };
+      roomState.skipVotes.clear();
+      broadcast({
+        type: 'QUEUE_ADVANCE',
+        currentVideo: roomState.currentVideo,
+        queue: roomState.queue,
+        reason: `Chiếu ngay bởi ${roomState.occupants[ws.userId]?.name || 'Khán giả'}`
+      });
+      break;
+    }
+
+    case 'SYNC_PLAY_PAUSE': {
+      roomState.currentVideo.isPlaying = !!data.isPlaying;
+      broadcast({
+        type: 'SYNC_PLAY_PAUSE',
+        isPlaying: roomState.currentVideo.isPlaying
+      }, ws);
+      break;
+    }
+  }
+}
+
+/**
+ * Handle client disconnection: clean up seat and notify other viewers
+ */
+function handleClientDisconnect(ws) {
+  if (!connectedClients.has(ws)) return;
+  connectedClients.delete(ws);
+
+  if (ws.userId && roomState.occupants[ws.userId]) {
+    const user = roomState.occupants[ws.userId];
+    delete roomState.occupants[ws.userId];
+    roomState.skipVotes.delete(ws.userId);
+
+    // Broadcast that viewer has left so their 3D chair becomes clean and empty
+    broadcast({
+      type: 'USER_LEFT',
+      userId: ws.userId,
+      seat: user.seat,
+      remainingCount: Object.keys(roomState.occupants).length
+    });
+
+    // Update skip threshold
+    const totalViewers = Object.keys(roomState.occupants).length || 1;
+    const required = Math.max(1, Math.floor(totalViewers * 0.3));
+    broadcast({
+      type: 'SKIP_VOTE_UPDATE',
+      votes: Array.from(roomState.skipVotes),
+      required
+    });
+  }
+}
+
+// Start Server
+server.listen(PORT, '0.0.0.0', () => {
+  const netAddrs = getNetworkAddresses();
+  console.log('='.repeat(65));
+  console.log(`🍿 Hanzu Cinema — Server Real-Time Multi-User Đang Chạy!`);
+  console.log(`👉 Truy cập trên máy này:   http://localhost:${PORT}`);
+  if (netAddrs.length > 0) {
+    console.log(`📱 Mời bạn bè trên cùng Wi-Fi / LAN truy cập các link sau:`);
+    netAddrs.forEach((a) => {
+      console.log(`   • [${a.name}]: http://${a.address}:${PORT}`);
+    });
+  }
+  console.log('='.repeat(65));
 });

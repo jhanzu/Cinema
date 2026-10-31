@@ -204,18 +204,25 @@
   // 3. APPLICATION STATE & MULTI-TAB PRESENCE
   // =========================================================================
   const urlParams = new URLSearchParams(window.location.search);
-  const savedProfile = JSON.parse(localStorage.getItem('wetube_cine_profile') || 'null');
-  const clientId = 'tab-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
+  const savedProfile = JSON.parse(
+    localStorage.getItem('hanzu_cinema_profile') ||
+    localStorage.getItem('wetube_cine_profile') ||
+    'null'
+  );
+  const clientId = 'user-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
+  const randomSuffix = Math.floor(100 + Math.random() * 900);
+  const defaultEmoji = AVATAR_EMOJIS[Math.floor(Math.random() * AVATAR_EMOJIS.length)];
+  const defaultColor = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
 
   const state = {
     clientId,
     roomCode: urlParams.get('room') || 'rap-chung-minh',
     me: {
       id: clientId,
-      name: (savedProfile && savedProfile.name) || 'Bạn (Khán giả)',
+      name: (savedProfile && savedProfile.name) || urlParams.get('name') || `Khán giả #${randomSuffix}`,
       seat: urlParams.get('seat') || (savedProfile && savedProfile.seat) || 'E5',
-      emoji: (savedProfile && savedProfile.emoji) || '😎',
-      color: (savedProfile && savedProfile.color) || '#F59E0B',
+      emoji: (savedProfile && savedProfile.emoji) || defaultEmoji,
+      color: (savedProfile && savedProfile.color) || defaultColor,
       isBot: false
     },
     peers: {}, // Remote tabs/users: { [clientId]: { id, name, seat, emoji, color } }
@@ -723,6 +730,14 @@
 
   function selectSeat(seatCode, silent = false) {
     if (!seatCoordMap[seatCode]) return;
+
+    // Check if another person is already sitting in this seat
+    const occupants = getOccupantMap();
+    if (occupants[seatCode] && !occupants[seatCode].isMe) {
+      showToast(`⚠️ Ghế ${seatCode} đã có bạn "${occupants[seatCode].name}" ngồi rồi! Hãy chọn ghế trống khác.`);
+      return;
+    }
+
     const prevSeat = state.me.seat;
     state.me.seat = seatCode;
     saveProfileToStorage();
@@ -1700,153 +1715,268 @@
     // Dummy bot viewers removed per user request
   }
 
+  let wsClient = null;
+  let wsConnected = false;
+  let wsReconnectTimer = null;
+
   function broadcastSync(payload) {
-    if (!syncChannel) return;
+    const packet = { ...payload, senderId: state.clientId, userId: state.me.id };
+    const jsonStr = JSON.stringify(packet);
+
+    // 1. Send via WebSocket to server (syncs across all devices, phones, laptops on LAN/Internet)
+    if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+      try {
+        wsClient.send(jsonStr);
+      } catch (e) {}
+    }
+
+    // 2. Also send via local BroadcastChannel for instant same-browser tabs
+    if (syncChannel) {
+      try {
+        syncChannel.postMessage(packet);
+      } catch (e) {}
+    }
+  }
+
+  function handleIncomingSyncData(data) {
+    if (!data || !data.type) return;
+    if (data.senderId === state.clientId || (data.userId && data.userId === state.me.id && data.type !== 'ROOM_SYNC')) {
+      return;
+    }
+
+    switch (data.type) {
+      case 'ROOM_SYNC':
+        // Full room sync from server when entering
+        if (data.assignedSeat && data.assignedSeat !== state.me.seat) {
+          state.me.seat = data.assignedSeat;
+          saveProfileToStorage();
+          const seatPill = document.getElementById('myNavSeat');
+          if (seatPill) seatPill.textContent = data.assignedSeat;
+        }
+        if (data.occupants) {
+          state.peers = {};
+          Object.values(data.occupants).forEach((occ) => {
+            if (occ.id !== state.me.id) {
+              state.peers[occ.id] = occ;
+            }
+          });
+          refreshSeatsVisuals();
+        }
+        if (Array.isArray(data.queue)) {
+          state.queue = data.queue;
+          renderQueue();
+        }
+        if (Array.isArray(data.skipVotes)) {
+          state.skipVotes = new Set(data.skipVotes);
+        }
+        updateSkipVoteUI();
+        if (data.currentVideo && data.currentVideo.videoId) {
+          loadAndPlayVideo(data.currentVideo, false);
+        }
+        break;
+
+      case 'USER_JOINED':
+        if (data.user && data.user.id && data.user.id !== state.me.id) {
+          state.peers[data.user.id] = data.user;
+          refreshSeatsVisuals();
+          updateSkipVoteUI();
+          showSeatSpeechBubble(data.user.seat, `👋 Chào cả rạp, mình vừa vào ngồi ghế ${data.user.seat}!`, 4200);
+          showToast(`👋 Khán giả "${data.user.name}" vừa vào rạp (Ghế ${data.user.seat})!`);
+        }
+        break;
+
+      case 'USER_LEFT':
+        if (data.userId && state.peers[data.userId]) {
+          const departingUser = state.peers[data.userId];
+          delete state.peers[data.userId];
+          if (state.skipVotes.has(data.userId)) {
+            state.skipVotes.delete(data.userId);
+          }
+          refreshSeatsVisuals();
+          updateSkipVoteUI();
+          showToast(`Khán giả "${departingUser.name || 'Một người bạn'}" đã rời khỏi rạp.`);
+        }
+        break;
+
+      case 'SEAT_CHANGE':
+        if (data.userId && data.seat) {
+          if (state.peers[data.userId]) {
+            state.peers[data.userId].seat = data.seat;
+          } else if (data.user) {
+            state.peers[data.user.id] = data.user;
+          }
+          refreshSeatsVisuals();
+          updateSkipVoteUI();
+          showSeatSpeechBubble(data.seat, `Khán giả vừa chuyển sang ghế ${data.seat}!`, 3500);
+        }
+        break;
+
+      case 'SEAT_TAKEN_ERROR':
+        showToast(`⚠️ ${data.message || 'Ghế đã có người ngồi!'}`);
+        break;
+
+      case 'CHAT_MSG':
+        if (data.msg) {
+          state.messages.push(data.msg);
+          renderChatMessages(false);
+          if (data.msg.seat) {
+            showSeatSpeechBubble(data.msg.seat, data.msg.text, 6200);
+          }
+          sfx.playChatPop();
+        }
+        break;
+
+      case 'REACTION':
+        if (data.seat && data.emoji) {
+          spawnSeatReaction3D(data.seat, data.emoji, false, true);
+        }
+        break;
+
+      case 'ADD_QUEUE':
+      case 'QUEUE_UPDATE':
+        if (Array.isArray(data.queue)) {
+          state.queue = data.queue;
+          renderQueue();
+          updateSkipVoteUI();
+        } else if (data.item && !state.queue.some((q) => q.id === data.item.id)) {
+          state.queue.push({ ...data.item });
+          renderQueue();
+          updateSkipVoteUI();
+        }
+        break;
+
+      case 'QUEUE_ADVANCE':
+        if (Array.isArray(data.queue)) {
+          state.queue = data.queue;
+          renderQueue();
+        }
+        state.skipVotes.clear();
+        updateSkipVoteUI();
+        if (data.nextVideo || data.currentVideo) {
+          const vid = data.nextVideo || data.currentVideo;
+          if (data.reason) {
+            showToast(`⏭️ ${data.reason} • Đang phát: ${vid.title}`);
+          }
+          loadAndPlayVideo(vid, false);
+        }
+        break;
+
+      case 'LOAD_VIDEO':
+        if (data.video) {
+          loadAndPlayVideo(data.video, false);
+        }
+        break;
+
+      case 'SYNC_PLAY_PAUSE':
+        if (ytReady && ytPlayer) {
+          if (data.isPlaying && typeof ytPlayer.playVideo === 'function') {
+            ytPlayer.playVideo();
+          } else if (!data.isPlaying && typeof ytPlayer.pauseVideo === 'function') {
+            ytPlayer.pauseVideo();
+          }
+        }
+        break;
+
+      case 'SKIP_VOTE_UPDATE':
+        if (Array.isArray(data.votes)) {
+          state.skipVotes = new Set(data.votes);
+          updateSkipVoteUI();
+        }
+        break;
+
+      case 'SKIP_VOTE':
+        if (Array.isArray(data.votes)) {
+          data.votes.forEach((id) => state.skipVotes.add(id));
+        } else if (data.voterId) {
+          state.skipVotes.add(data.voterId);
+        }
+        updateSkipVoteUI();
+        break;
+
+      case 'SKIP_VOTE_REVOKE':
+        if (data.voterId) {
+          state.skipVotes.delete(data.voterId);
+        }
+        if (Array.isArray(data.votes)) {
+          state.skipVotes = new Set(data.votes);
+        }
+        updateSkipVoteUI();
+        break;
+
+      case 'PEER_JOIN':
+        if (data.user && data.user.id && data.user.id !== state.me.id) {
+          state.peers[data.user.id] = data.user;
+          refreshSeatsVisuals();
+          updateSkipVoteUI();
+        }
+        break;
+
+      case 'PEER_LEAVE':
+        if (data.peerId && state.peers[data.peerId]) {
+          delete state.peers[data.peerId];
+          if (state.skipVotes.has(data.peerId)) {
+            state.skipVotes.delete(data.peerId);
+          }
+          refreshSeatsVisuals();
+          updateSkipVoteUI();
+        }
+        break;
+    }
+  }
+
+  function initRealtimeWebSocket() {
+    if (!window.location.host) return; // Opened as local file
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+
     try {
-      syncChannel.postMessage({ ...payload, senderId: state.clientId });
-    } catch (e) {}
+      wsClient = new WebSocket(wsUrl);
+
+      wsClient.onopen = () => {
+        wsConnected = true;
+        clearTimeout(wsReconnectTimer);
+        // Register client user with server room
+        wsClient.send(JSON.stringify({
+          type: 'INIT_USER',
+          user: state.me
+        }));
+      };
+
+      wsClient.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          handleIncomingSyncData(data);
+        } catch (err) {}
+      };
+
+      wsClient.onclose = () => {
+        wsConnected = false;
+        clearTimeout(wsReconnectTimer);
+        wsReconnectTimer = setTimeout(initRealtimeWebSocket, 2500);
+      };
+
+      wsClient.onerror = () => {
+        wsConnected = false;
+      };
+    } catch (e) {
+      wsConnected = false;
+    }
   }
 
   function setupSyncListener() {
-    if (!syncChannel) return;
+    // 1. Setup local BroadcastChannel for same-browser tabs
+    if (syncChannel) {
+      broadcastSync({ type: 'PEER_JOIN', user: state.me });
+      syncChannel.onmessage = (event) => {
+        handleIncomingSyncData(event.data);
+      };
+    }
 
-    // Announce this tab to peers
-    broadcastSync({ type: 'PEER_JOIN', user: state.me });
-
-    syncChannel.onmessage = (event) => {
-      const data = event.data;
-      if (!data || !data.type || data.senderId === state.clientId) return;
-
-      switch (data.type) {
-        case 'PEER_JOIN':
-          if (data.user && data.user.id) {
-            state.peers[data.user.id] = data.user;
-            refreshSeatsVisuals();
-            updateSkipVoteUI();
-            // Reply with our current state to newly joined peer
-            broadcastSync({
-              type: 'SYNC_STATE_RESPONSE',
-              targetId: data.user.id,
-              user: state.me,
-              currentVideo: state.currentVideo,
-              queue: state.queue
-            });
-          }
-          break;
-
-        case 'SYNC_STATE_RESPONSE':
-          if (data.targetId === state.clientId) {
-            if (data.user && data.user.id) {
-              state.peers[data.user.id] = data.user;
-            }
-            if (data.queue && data.queue.length > 0) {
-              state.queue = data.queue;
-              renderQueue();
-            }
-            refreshSeatsVisuals();
-            updateSkipVoteUI();
-          }
-          break;
-
-        case 'SEAT_CHANGE':
-          if (data.user && data.seat) {
-            state.peers[data.user.id] = { ...data.user, seat: data.seat };
-            refreshSeatsVisuals();
-            updateSkipVoteUI();
-            showSeatSpeechBubble(data.seat, `Khán giả vừa chuyển sang ghế ${data.seat}!`, 3500);
-          }
-          break;
-
-        case 'CHAT_MSG':
-          state.messages.push(data.msg);
-          renderChatMessages(false);
-          showSeatSpeechBubble(data.msg.seat, data.msg.text, 6200);
-          sfx.playChatPop();
-          break;
-
-        case 'REACTION':
-          spawnSeatReaction3D(data.seat, data.emoji, false, true);
-          break;
-
-        case 'ADD_QUEUE':
-          if (!state.queue.some((q) => q.id === data.item.id)) {
-            state.queue.push({ ...data.item });
-            renderQueue();
-            updateSkipVoteUI();
-          }
-          break;
-
-        case 'VOTE_QUEUE':
-          if (Array.isArray(data.queue)) {
-            state.queue = data.queue;
-            renderQueue();
-            updateSkipVoteUI();
-          }
-          break;
-
-        case 'QUEUE_ADVANCE':
-          if (Array.isArray(data.queue)) {
-            state.queue = data.queue;
-            renderQueue();
-          }
-          state.skipVotes.clear();
-          updateSkipVoteUI();
-          if (data.nextVideo) {
-            if (data.reason) {
-              showToast(`⏭️ ${data.reason} • Chuyển sang: ${data.nextVideo.title}`);
-            }
-            loadAndPlayVideo(data.nextVideo, false);
-          }
-          break;
-
-        case 'LOAD_VIDEO':
-          loadAndPlayVideo(data.video, false);
-          break;
-
-        case 'SYNC_PLAY_PAUSE':
-          if (ytReady && ytPlayer) {
-            if (data.isPlaying && typeof ytPlayer.playVideo === 'function') {
-              ytPlayer.playVideo();
-            } else if (!data.isPlaying && typeof ytPlayer.pauseVideo === 'function') {
-              ytPlayer.pauseVideo();
-            }
-          }
-          break;
-
-        case 'SKIP_VOTE':
-          if (Array.isArray(data.votes)) {
-            data.votes.forEach((id) => state.skipVotes.add(id));
-          } else if (data.voterId) {
-            state.skipVotes.add(data.voterId);
-          }
-          updateSkipVoteUI();
-          break;
-
-        case 'SKIP_VOTE_REVOKE':
-          if (data.voterId) {
-            state.skipVotes.delete(data.voterId);
-          }
-          if (Array.isArray(data.votes)) {
-            state.skipVotes = new Set(data.votes);
-          }
-          updateSkipVoteUI();
-          break;
-
-        case 'PEER_LEAVE':
-          if (data.peerId && state.peers[data.peerId]) {
-            delete state.peers[data.peerId];
-            if (state.skipVotes.has(data.peerId)) {
-              state.skipVotes.delete(data.peerId);
-            }
-            refreshSeatsVisuals();
-            updateSkipVoteUI();
-          }
-          break;
-      }
-    };
+    // 2. Setup WebSocket client to connect across multiple devices/LAN/Internet
+    initRealtimeWebSocket();
 
     window.addEventListener('beforeunload', () => {
-      broadcastSync({ type: 'PEER_LEAVE', peerId: state.clientId });
+      broadcastSync({ type: 'PEER_LEAVE', peerId: state.clientId, userId: state.me.id });
     });
   }
 
@@ -1972,12 +2102,22 @@
     });
 
     // Share Room Invite Link
-    document.getElementById('btnShareRoom')?.addEventListener('click', () => {
-      const shareUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(state.roomCode)}&seat=${encodeURIComponent(state.me.seat)}`;
+    document.getElementById('btnShareRoom')?.addEventListener('click', async () => {
+      let shareUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(state.roomCode)}`;
+      try {
+        const res = await fetch('/api/info');
+        if (res.ok) {
+          const info = await res.json();
+          if (['localhost', '127.0.0.1'].includes(window.location.hostname) && info.lanUrl) {
+            shareUrl = `${info.lanUrl}${window.location.pathname}?room=${encodeURIComponent(state.roomCode)}`;
+          }
+        }
+      } catch (e) {}
+
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(shareUrl);
       }
-      showToast(`🔗 Đã sao chép link mời bạn bè vào phòng #${state.roomCode}!`);
+      showToast(`🔗 Đã sao chép link rạp: ${shareUrl}\nGửi link này cho bạn bè trên cùng Wi-Fi để xem chung!`, 4800);
     });
 
     // Profile Modal
