@@ -1799,19 +1799,40 @@
   let wsClient = null;
   let wsConnected = false;
   let wsReconnectTimer = null;
+  let mqttClient = null;
+  let mqttConnected = false;
+  let peerHeartbeatTimer = null;
+  const peerLastSeen = {};
+
+  const CLOUD_ROOM_TOPIC = `hanzu-cinema/v1/${encodeURIComponent(state.roomCode || 'rap-chung-minh')}`;
 
   function broadcastSync(payload) {
-    const packet = { ...payload, senderId: state.clientId, userId: state.me.id };
+    const packet = {
+      ...payload,
+      from: state.clientId,
+      senderId: state.clientId,
+      userId: state.me.id,
+      timestamp: Date.now()
+    };
     const jsonStr = JSON.stringify(packet);
 
-    // 1. Send via WebSocket to server (syncs across all devices, phones, laptops on LAN/Internet)
+    // 1. Send via native WebSocket if connected (Local Node.js server or custom WSS)
     if (wsClient && wsClient.readyState === WebSocket.OPEN) {
       try {
         wsClient.send(jsonStr);
       } catch (e) {}
     }
 
-    // 2. Also send via local BroadcastChannel for instant same-browser tabs
+    // 2. Send via Cloud Broker (connects all visitors on https://jhanzu.github.io/Cinema/ anywhere in the world!)
+    if (mqttClient && mqttConnected) {
+      try {
+        const msg = new window.Paho.MQTT.Message(jsonStr);
+        msg.destinationName = CLOUD_ROOM_TOPIC;
+        mqttClient.send(msg);
+      } catch (e) {}
+    }
+
+    // 3. Send via local BroadcastChannel for same-browser tabs
     if (syncChannel) {
       try {
         syncChannel.postMessage(packet);
@@ -1821,11 +1842,45 @@
 
   function handleIncomingSyncData(data) {
     if (!data || !data.type) return;
-    if (data.senderId === state.clientId || (data.userId && data.userId === state.me.id && data.type !== 'ROOM_SYNC')) {
-      return;
-    }
+    if (data.from === state.clientId || data.senderId === state.clientId) return;
+    if (data.userId && data.userId === state.me.id && data.type !== 'ROOM_SYNC') return;
 
     switch (data.type) {
+      case 'ROOM_SYNC_REPLY':
+        if (!data.targetClientId || data.targetClientId === state.clientId) {
+          if (data.occupants) {
+            Object.values(data.occupants).forEach((occ) => {
+              if (occ.id !== state.me.id) {
+                state.peers[occ.id] = occ;
+                peerLastSeen[occ.id] = Date.now();
+              }
+            });
+            refreshSeatsVisuals();
+            updateSkipVoteUI();
+          }
+          if (data.currentVideo && data.currentVideo.videoId && (!state.currentVideo || !state.currentVideo.videoId)) {
+            loadAndPlayVideo(data.currentVideo, false);
+          }
+          if (Array.isArray(data.queue) && data.queue.length > 0) {
+            state.queue = data.queue;
+            renderQueue();
+            updateSkipVoteUI();
+          }
+          if (Array.isArray(data.skipVotes)) {
+            state.skipVotes = new Set(data.skipVotes);
+            updateSkipVoteUI();
+          }
+        }
+        break;
+
+      case 'HEARTBEAT':
+        if (data.user && data.user.id && data.user.id !== state.me.id) {
+          state.peers[data.user.id] = data.user;
+          peerLastSeen[data.user.id] = Date.now();
+          refreshSeatsVisuals();
+        }
+        break;
+
       case 'ROOM_SYNC':
         // Full room sync from server when entering
         if (data.assignedSeat && data.assignedSeat !== state.me.seat) {
@@ -1857,12 +1912,32 @@
         break;
 
       case 'USER_JOINED':
+      case 'PEER_JOIN':
+      case 'INIT_USER':
         if (data.user && data.user.id && data.user.id !== state.me.id) {
           state.peers[data.user.id] = data.user;
+          peerLastSeen[data.user.id] = Date.now();
           refreshSeatsVisuals();
           updateSkipVoteUI();
           showSeatSpeechBubble(data.user.seat, `👋 Chào cả rạp, mình vừa vào ngồi ghế ${data.user.seat}!`, 4200);
           showToast(`👋 Khán giả "${data.user.name}" vừa vào rạp (Ghế ${data.user.seat})!`);
+
+          // If connected via Cloud Broker, reply with full room state so new peer syncs immediately!
+          if (mqttConnected && mqttClient) {
+            try {
+              const reply = new window.Paho.MQTT.Message(JSON.stringify({
+                from: state.clientId,
+                type: 'ROOM_SYNC_REPLY',
+                targetClientId: data.from || data.clientId,
+                occupants: getOccupantMap(),
+                currentVideo: state.currentVideo,
+                queue: state.queue,
+                skipVotes: Array.from(state.skipVotes)
+              }));
+              reply.destinationName = CLOUD_ROOM_TOPIC;
+              mqttClient.send(reply);
+            } catch (err) {}
+          }
         }
         break;
 
@@ -2017,24 +2092,19 @@
   let currentWsUrl = '';
 
   function getTargetWsUrl() {
-    // 1. URL Query Param ?ws=...
     const paramWs = urlParams.get('ws');
     if (paramWs) return paramWs;
 
-    // 2. Saved custom URL in localStorage
     const savedWs = localStorage.getItem('hanzu_cinema_ws_url');
     if (savedWs) return savedWs;
 
-    // 3. Localhost or Local LAN host
     const host = window.location.host;
     const isLocal = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host) || /^10\./.test(host);
     if (isLocal && host) {
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       return `${proto}//${host}/ws`;
     }
-
-    // 4. Default Production Cloud WebSocket Server (For GitHub Pages https://jhanzu.github.io/Cinema/)
-    return 'wss://cinema-8pqa.onrender.com/ws';
+    return null;
   }
 
   function updateServerStatusUI(status) {
@@ -2045,22 +2115,25 @@
     pill.classList.remove('online', 'connecting', 'offline');
     if (status === 'online') {
       pill.classList.add('online');
-      label.textContent = 'Máy chủ chung';
-      pill.title = `Đã kết nối máy chủ phòng chiếu: ${currentWsUrl} (Click để xem)`;
+      label.textContent = mqttConnected ? 'Máy chủ chung (Cloud 🟢)' : 'Máy chủ chung 🟢';
+      pill.title = mqttConnected
+        ? 'Đã kết nối Máy chủ Đám mây Toàn cầu — Mọi người trên jhanzu.github.io/Cinema/ đều xem chung và thấy nhau!'
+        : `Đã kết nối máy chủ: ${currentWsUrl}`;
     } else if (status === 'connecting') {
       pill.classList.add('connecting');
       label.textContent = 'Đang kết nối...';
-      pill.title = `Đang kết nối tới: ${currentWsUrl}`;
+      pill.title = 'Đang kết nối máy chủ phòng chiếu...';
     } else {
       pill.classList.add('offline');
       label.textContent = 'Ngoại tuyến';
-      pill.title = 'Chưa kết nối máy chủ chung. Click để cài đặt URL server.';
+      pill.title = 'Chưa kết nối máy chủ chung. Bấm để kết nối lại.';
     }
   }
 
+  // 1. Native WebSocket Connection (For local Node.js server or custom user WebSocket URL)
   function initRealtimeWebSocket() {
     currentWsUrl = getTargetWsUrl();
-    if (!currentWsUrl) return;
+    if (!currentWsUrl) return false;
 
     updateServerStatusUI('connecting');
 
@@ -2075,7 +2148,6 @@
         wsConnected = true;
         clearTimeout(wsReconnectTimer);
         updateServerStatusUI('online');
-        // Register client user with server room
         wsClient.send(JSON.stringify({
           type: 'INIT_USER',
           user: state.me
@@ -2100,10 +2172,114 @@
         wsConnected = false;
         updateServerStatusUI('offline');
       };
+      return true;
     } catch (e) {
       wsConnected = false;
       updateServerStatusUI('offline');
+      return false;
     }
+  }
+
+  // 2. Global Cloud Realtime Broker (For GitHub Pages https://jhanzu.github.io/Cinema/ - Zero server required!)
+  function initRealtimeCloudBroker() {
+    if (!window.Paho || !window.Paho.MQTT) {
+      console.warn('Paho MQTT library not loaded, retrying WebSocket...');
+      return initRealtimeWebSocket();
+    }
+
+    updateServerStatusUI('connecting');
+
+    const brokers = [
+      { host: 'broker.emqx.io', port: 8084, path: '/mqtt' },
+      { host: 'broker.hivemq.com', port: 8884, path: '/mqtt' }
+    ];
+    let bIdx = 0;
+
+    function connectBroker() {
+      const b = brokers[bIdx];
+      const pahoId = `hanzu-${state.clientId}-${Math.random().toString(36).slice(2, 6)}`;
+
+      try {
+        if (mqttClient) {
+          try { mqttClient.disconnect(); } catch (e) {}
+        }
+
+        mqttClient = new window.Paho.MQTT.Client(b.host, b.port, b.path, pahoId);
+
+        mqttClient.onConnectionLost = (resp) => {
+          mqttConnected = false;
+          updateServerStatusUI('offline');
+          bIdx = (bIdx + 1) % brokers.length;
+          setTimeout(connectBroker, 3000);
+        };
+
+        mqttClient.onMessageArrived = (message) => {
+          try {
+            const data = JSON.parse(message.payloadString);
+            handleIncomingSyncData(data);
+          } catch (e) {}
+        };
+
+        mqttClient.connect({
+          useSSL: true,
+          timeout: 5,
+          onSuccess: () => {
+            mqttConnected = true;
+            updateServerStatusUI('online');
+            mqttClient.subscribe(CLOUD_ROOM_TOPIC, {
+              onSuccess: () => {
+                // Announce self to everyone in room
+                broadcastSync({
+                  type: 'PEER_JOIN',
+                  user: state.me,
+                  clientId: state.clientId
+                });
+
+                // Periodic Heartbeat every 12s
+                clearInterval(peerHeartbeatTimer);
+                peerHeartbeatTimer = setInterval(() => {
+                  if (mqttConnected) {
+                    broadcastSync({
+                      type: 'HEARTBEAT',
+                      user: state.me,
+                      clientId: state.clientId
+                    });
+                  }
+                  // Prune stale peers inactive >35s
+                  const now = Date.now();
+                  let changed = false;
+                  Object.keys(peerLastSeen).forEach((pid) => {
+                    if (now - peerLastSeen[pid] > 35000) {
+                      delete peerLastSeen[pid];
+                      delete state.peers[pid];
+                      changed = true;
+                    }
+                  });
+                  if (changed) {
+                    refreshSeatsVisuals();
+                    updateSkipVoteUI();
+                  }
+                }, 12000);
+              }
+            });
+          },
+          onFailure: (err) => {
+            mqttConnected = false;
+            updateServerStatusUI('offline');
+            bIdx = (bIdx + 1) % brokers.length;
+            setTimeout(connectBroker, 3500);
+          }
+        });
+      } catch (err) {
+        mqttConnected = false;
+        updateServerStatusUI('offline');
+        bIdx = (bIdx + 1) % brokers.length;
+        setTimeout(connectBroker, 3500);
+      }
+    }
+
+    connectBroker();
+    return true;
   }
 
   function setupSyncListener() {
@@ -2115,8 +2291,18 @@
       };
     }
 
-    // 2. Setup WebSocket client to connect across multiple devices/LAN/Internet
-    initRealtimeWebSocket();
+    // 2. Setup Realtime Networking:
+    // If running on localhost or LAN with node server.js: use native WebSocket
+    // If on GitHub Pages (https://jhanzu.github.io/Cinema/): use Global Cloud Realtime Broker!
+    const host = window.location.host;
+    const isLocalNode = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
+    const customWs = urlParams.get('ws') || localStorage.getItem('hanzu_cinema_ws_url');
+
+    if (customWs || isLocalNode) {
+      initRealtimeWebSocket();
+    } else {
+      initRealtimeCloudBroker();
+    }
 
     window.addEventListener('beforeunload', () => {
       broadcastSync({ type: 'PEER_LEAVE', peerId: state.clientId, userId: state.me.id });
