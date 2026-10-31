@@ -2089,3 +2089,249 @@ body.is-dragging-camera iframe,
     width: 50px;
   }
 }
+
+
+/* ==========================================================================
+   Gender Selector & Onboarding Profile Card
+   ========================================================================== */
+.gender-selector-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 10px 0 16px;
+}
+
+.gender-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  color: var(--text-primary);
+  user-select: none;
+}
+
+.gender-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.gender-card .gender-icon {
+  font-size: 1.6rem;
+  margin-bottom: 4px;
+}
+
+.gender-card .gender-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.gender-card .gender-sub {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Active Gender Card Glows */
+.gender-card[data-gender="male"].active {
+  border-color: #38BDF8;
+  background: rgba(56, 189, 248, 0.15);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.4), inset 0 0 8px rgba(56, 189, 248, 0.2);
+}
+
+.gender-card[data-gender="female"].active {
+  border-color: #F43F5E;
+  background: rgba(244, 63, 94, 0.15);
+  box-shadow: 0 0 16px rgba(244, 63, 94, 0.4), inset 0 0 8px rgba(244, 63, 94, 0.2);
+}
+
+.gender-card[data-gender="other"].active {
+  border-color: #F59E0B;
+  background: rgba(245, 158, 11, 0.15);
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.4), inset 0 0 8px rgba(245, 158, 11, 0.2);
+}
+
+/* Profile Live Preview Card */
+.profile-preview-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: rgba(10, 11, 22, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  margin-bottom: 16px;
+  backdrop-filter: blur(10px);
+}
+
+.preview-avatar-badge {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #1E1B4B 0%, #312E81 100%);
+  border: 2px solid #8B5CF6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  box-shadow: 0 0 14px rgba(139, 92, 246, 0.4);
+}
+
+.preview-gender-tag {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  font-size: 0.85rem;
+  background: #000;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.preview-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.preview-name {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preview-seat {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* 3D Mannequin Gender Variations */
+.mannequin-gender {
+  font-size: 0.72rem;
+  margin-right: 2px;
+}
+
+/* Female Mannequin Hair & Accents */
+.block-mannequin.mannequin-female .block-glasses-3d::before {
+  background: #F43F5E;
+  box-shadow: 0 0 4px #F43F5E;
+}
+.block-mannequin.mannequin-female .block-glasses-3d::after {
+  background: #A855F7;
+  box-shadow: 0 0 4px #A855F7;
+}
+
+.block-hair-female {
+  position: absolute;
+  top: -8px;
+  right: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4A1D96 0%, #831843 100%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 6px rgba(244, 63, 94, 0.4);
+  transform: translateZ(16px);
+  animation: hairBounce 4s ease-in-out infinite alternate;
+}
+
+@keyframes hairBounce {
+  0% { transform: translateZ(16px) rotate(0deg); }
+  100% { transform: translateZ(16px) rotate(8deg); }
+}
+
+/* Male Mannequin Hair & Accents */
+.block-mannequin.mannequin-male .block-glasses-3d::before {
+  background: #00F2FE;
+  box-shadow: 0 0 4px #00F2FE;
+}
+.block-mannequin.mannequin-male .block-glasses-3d::after {
+  background: #3B82F6;
+  box-shadow: 0 0 4px #3B82F6;
+}
+
+/* Other / Prismatic Mannequin Accents */
+.block-mannequin.mannequin-other .block-glasses-3d::before {
+  background: #F59E0B;
+  box-shadow: 0 0 4px #F59E0B;
+}
+.block-mannequin.mannequin-other .block-glasses-3d::after {
+  background: #10B981;
+  box-shadow: 0 0 4px #10B981;
+}
+
+/* Server Status Pill */
+.server-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.server-status-pill:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.server-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  background: #64748B;
+}
+
+.server-status-pill.online .server-dot {
+  background: #10B981;
+  box-shadow: 0 0 8px #10B981;
+}
+
+.server-status-pill.connecting .server-dot {
+  background: #F59E0B;
+  box-shadow: 0 0 8px #F59E0B;
+  animation: pulseDot 1s infinite alternate;
+}
+
+.server-status-pill.offline .server-dot {
+  background: #EF4444;
+  box-shadow: 0 0 8px #EF4444;
+}
+
+@keyframes pulseDot {
+  from { opacity: 0.4; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1.15); }
+}
+
+/* Quick Action Badge in Welcome Modal */
+.modal-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}

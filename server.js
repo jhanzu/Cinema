@@ -409,9 +409,11 @@ function handleClientMessage(ws, data) {
       const finalSeat = assignAvailableSeat(user.seat, roomState.occupants);
       user.seat = finalSeat;
 
+      const gender = (user.gender === 'female' || user.gender === 'other') ? user.gender : 'male';
       roomState.occupants[user.id] = {
         id: user.id,
-        name: user.name || 'Khán giả',
+        name: (user.name || 'Khán giả').trim().slice(0, 24),
+        gender: gender,
         seat: finalSeat,
         emoji: user.emoji || '😎',
         color: user.color || '#3B82F6',
@@ -471,12 +473,33 @@ function handleClientMessage(ws, data) {
         return;
       }
 
+      if (data.user) {
+        if (data.user.name) roomState.occupants[ws.userId].name = String(data.user.name).trim().slice(0, 24);
+        if (data.user.gender) roomState.occupants[ws.userId].gender = data.user.gender;
+        if (data.user.emoji) roomState.occupants[ws.userId].emoji = data.user.emoji;
+        if (data.user.color) roomState.occupants[ws.userId].color = data.user.color;
+      }
       roomState.occupants[ws.userId].seat = newSeat;
       broadcast({
         type: 'SEAT_CHANGE',
         userId: ws.userId,
         seat: newSeat,
         user: roomState.occupants[ws.userId]
+      });
+      break;
+    }
+
+    case 'PROFILE_UPDATE': {
+      if (!ws.userId || !roomState.occupants[ws.userId] || !data.user) return;
+      const occ = roomState.occupants[ws.userId];
+      if (data.user.name) occ.name = String(data.user.name).trim().slice(0, 24);
+      if (data.user.gender) occ.gender = (data.user.gender === 'female' || data.user.gender === 'other') ? data.user.gender : 'male';
+      if (data.user.emoji) occ.emoji = data.user.emoji;
+      if (data.user.color) occ.color = data.user.color;
+      broadcast({
+        type: 'PROFILE_UPDATED',
+        userId: ws.userId,
+        user: occ
       });
       break;
     }

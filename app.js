@@ -220,6 +220,8 @@
     me: {
       id: clientId,
       name: (savedProfile && savedProfile.name) || urlParams.get('name') || `Khán giả #${randomSuffix}`,
+      gender: (savedProfile && savedProfile.gender) || 'male',
+      hasConfigured: !!(savedProfile && savedProfile.hasConfigured),
       seat: urlParams.get('seat') || (savedProfile && savedProfile.seat) || 'E5',
       emoji: (savedProfile && savedProfile.emoji) || defaultEmoji,
       color: (savedProfile && savedProfile.color) || defaultColor,
@@ -335,7 +337,13 @@
               <span id="onlineCountText">1 / 100 ghế</span>
             </div>
 
-            <button class="my-seat-pill" id="btnOpenProfile" title="Đổi tên, avatar hoặc chọn ghế ngồi">
+            <button class="server-status-pill connecting" id="btnOpenServerSettings" title="Cài đặt kết nối máy chủ phòng chiếu chung">
+              <span class="server-dot" id="serverDot"></span>
+              <span id="serverStatusText">Đang kết nối...</span>
+            </button>
+
+            <button class="my-seat-pill" id="btnOpenProfile" title="Đổi tên, giới tính hoặc chọn ghế ngồi">
+              <span id="myNavGender">${state.me.gender === 'female' ? '👩' : (state.me.gender === 'other' ? '✨' : '👨')}</span>
               <span id="myNavEmoji">${state.me.emoji}</span>
               <span id="myNavName">${escapeHtml(state.me.name)}</span>
               <span>• Ghế <strong id="myNavSeat">${state.me.seat}</strong></span>
@@ -501,25 +509,90 @@
           </aside>
         </div>
 
-        <!-- Profile & Avatar Modal -->
+        <!-- Profile & Onboarding Modal -->
         <div class="modal-backdrop" id="profileModal">
-          <div class="modal-card">
+          <div class="modal-card" style="max-width: 480px;">
             <div class="modal-header">
-              <div class="modal-title">✨ Hồ sơ khán giả & Chỗ ngồi</div>
-              <button class="icon-btn" id="btnCloseProfile" type="button">✕</button>
+              <div class="modal-title" id="profileModalTitle">✨ Hồ sơ khán giả & Chỗ ngồi</div>
+              <button class="icon-btn" id="btnCloseProfile" type="button" title="Đóng">✕</button>
             </div>
-            <form id="formSaveProfile">
-              <label style="font-size:0.78rem;color:var(--text-secondary);display:block;margin-bottom:6px;">Tên hiển thị trên ghế 3D</label>
-              <input type="text" class="text-input" id="inputProfileName" style="width:100%;margin-bottom:14px;" value="${escapeHtml(state.me.name)}" maxlength="24" required />
 
-              <label style="font-size:0.78rem;color:var(--text-secondary);display:block;">Chọn Avatar nhân vật</label>
+            <!-- Live Preview Card -->
+            <div class="profile-preview-card" id="profilePreviewCard">
+              <div class="preview-avatar-badge" id="previewBadge">
+                <span id="previewEmoji">${state.me.emoji}</span>
+                <span class="preview-gender-tag" id="previewGenderTag">${state.me.gender === 'female' ? '👩' : (state.me.gender === 'other' ? '✨' : '👨')}</span>
+              </div>
+              <div class="preview-info">
+                <div class="preview-name" id="previewName">${escapeHtml(state.me.name)}</div>
+                <div class="preview-seat">Ghế: <strong id="previewSeat">${state.me.seat}</strong> • Hanzu Cinema</div>
+              </div>
+            </div>
+
+            <form id="formSaveProfile">
+              <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:6px;">1. Tên hiển thị trên ghế 3D</label>
+              <input type="text" class="text-input" id="inputProfileName" style="width:100%;margin-bottom:12px;" value="${escapeHtml(state.me.name)}" maxlength="20" placeholder="Nhập tên hoặc nickname..." required />
+
+              <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;">2. Giới tính của bạn</label>
+              <div class="gender-selector-grid" id="genderSelectorGrid">
+                <button type="button" class="gender-card ${state.me.gender === 'male' ? 'active' : ''}" data-gender="male">
+                  <span class="gender-icon">👨</span>
+                  <span class="gender-label">Nam</span>
+                  <span class="gender-sub">Cyber Cyan</span>
+                </button>
+                <button type="button" class="gender-card ${state.me.gender === 'female' ? 'active' : ''}" data-gender="female">
+                  <span class="gender-icon">👩</span>
+                  <span class="gender-label">Nữ</span>
+                  <span class="gender-sub">Neon Violet</span>
+                </button>
+                <button type="button" class="gender-card ${state.me.gender === 'other' ? 'active' : ''}" data-gender="other">
+                  <span class="gender-icon">✨</span>
+                  <span class="gender-label">Khác</span>
+                  <span class="gender-sub">Prism Gold</span>
+                </button>
+              </div>
+
+              <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;">3. Chọn Avatar nhân vật</label>
               <div class="emoji-grid" id="emojiPickerGrid"></div>
 
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
-                <button type="button" class="icon-btn" id="btnRandomEmptySeat">🎲 Chọn ghế VIP ngẫu nhiên</button>
-                <button type="submit" class="btn-submit">Lưu thay đổi</button>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
+                <button type="button" class="icon-btn" id="btnRandomEmptySeat">🎲 Ghế VIP ngẫu nhiên</button>
+                <button type="submit" class="btn-submit" id="btnSubmitProfile" style="padding:10px 22px;font-size:0.92rem;">🎬 Vào Rạp Xem Phim</button>
               </div>
             </form>
+          </div>
+        </div>
+
+        <!-- Server Settings Modal -->
+        <div class="modal-backdrop" id="serverSettingsModal">
+          <div class="modal-card" style="max-width: 480px;">
+            <div class="modal-header">
+              <div class="modal-title">🌐 Máy chủ phòng chiếu chung</div>
+              <button class="icon-btn" id="btnCloseServerSettings" type="button">✕</button>
+            </div>
+            <p style="font-size:0.82rem;color:var(--text-secondary);line-height:1.5;margin-bottom:12px;">
+              Để mọi người truy cập <strong>https://jhanzu.github.io/Cinema/</strong> cùng xem một màn hình, tất cả sẽ kết nối tới WebSocket Server chung.
+            </p>
+            <div style="margin-bottom:12px;">
+              <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:6px;">Địa chỉ WebSocket Server (WSS):</label>
+              <input type="text" class="text-input" id="inputCustomWsUrl" style="width:100%;font-family:monospace;font-size:0.8rem;" placeholder="wss://your-cinema-server.onrender.com/ws" />
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:14px;">
+              <button type="button" class="icon-btn" id="btnResetDefaultServer" style="flex:1;">🔄 Mặc định Cloud</button>
+              <button type="button" class="icon-btn" id="btnConnectWsNow" style="flex:1;background:rgba(59,130,246,0.2);border-color:#3B82F6;color:#93C5FD;">⚡ Kết nối lại</button>
+            </div>
+            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px 12px;margin-bottom:14px;">
+              <div style="font-size:0.75rem;font-weight:700;color:#38BDF8;margin-bottom:4px;">💡 Hướng dẫn tạo server Render miễn phí 100%:</div>
+              <ol style="font-size:0.72rem;color:var(--text-secondary);margin:0;padding-left:16px;line-height:1.5;">
+                <li>Đăng nhập <strong>render.com</strong> miễn phí.</li>
+                <li>Tạo <strong>New Web Service</strong> -> Kết nối repo <strong>jhanzu/Cinema</strong>.</li>
+                <li>Bấm <strong>Deploy</strong> -> Nhận link dạng <code>https://...onrender.com</code>.</li>
+                <li>Dán link WSS vào đây hoặc gửi link kèm <code>?ws=...</code> cho bạn bè!</li>
+              </ol>
+            </div>
+            <div style="display:flex;justify-content:flex-end;">
+              <button type="button" class="btn-submit" id="btnSaveServerSettings">Xác nhận</button>
+            </div>
           </div>
         </div>
 
@@ -672,14 +745,20 @@
           const bubbleHtml = bubble
             ? `<div class="seat-speech-bubble">${escapeHtml(bubble.text)}</div>`
             : '';
+          const gender = person.gender || 'male';
+          const genderIcon = gender === 'female' ? '👩' : (gender === 'other' ? '✨' : '👨');
+          const hairHtml = gender === 'female' ? '<div class="block-hair-female"></div>' : '';
+
           slot.innerHTML = `
             ${bubbleHtml}
-            <div class="block-mannequin ${person.isMe ? 'is-me' : 'is-peer'}" style="--char-color:${person.color || '#F59E0B'}">
+            <div class="block-mannequin mannequin-${gender} ${person.isMe ? 'is-me' : 'is-peer'}" style="--char-color:${person.color || '#3B82F6'}">
               <div class="mannequin-nametag">
+                <span class="mannequin-gender">${genderIcon}</span>
                 <span class="mannequin-emoji">${person.emoji || '😎'}</span>
                 <span class="mannequin-name">${escapeHtml(person.name)}</span>
               </div>
               <div class="block-head-wrap">
+                ${hairHtml}
                 <div class="block-head">
                   <div class="block-face">${person.emoji || '😎'}</div>
                   <div class="block-glasses-3d"></div>
@@ -719,6 +798,8 @@
     if (myNavName) myNavName.textContent = state.me.name;
     const myNavEmoji = document.getElementById('myNavEmoji');
     if (myNavEmoji) myNavEmoji.textContent = state.me.emoji;
+    const myNavGender = document.getElementById('myNavGender');
+    if (myNavGender) myNavGender.textContent = state.me.gender === 'female' ? '👩' : (state.me.gender === 'other' ? '✨' : '👨');
     const screenSeatStatus = document.getElementById('screenSeatStatus');
     if (screenSeatStatus) screenSeatStatus.textContent = `GHẾ CỦA BẠN: ${state.me.seat}`;
     const chatInput = document.getElementById('inputChatMessage');
@@ -1800,14 +1881,23 @@
 
       case 'SEAT_CHANGE':
         if (data.userId && data.seat) {
-          if (state.peers[data.userId]) {
+          if (data.user) {
+            state.peers[data.userId] = { ...(state.peers[data.userId] || {}), ...data.user, seat: data.seat };
+          } else if (state.peers[data.userId]) {
             state.peers[data.userId].seat = data.seat;
-          } else if (data.user) {
-            state.peers[data.user.id] = data.user;
           }
           refreshSeatsVisuals();
           updateSkipVoteUI();
           showSeatSpeechBubble(data.seat, `Khán giả vừa chuyển sang ghế ${data.seat}!`, 3500);
+        }
+        break;
+
+      case 'PROFILE_UPDATED':
+        if (data.userId && data.user) {
+          state.peers[data.userId] = { ...(state.peers[data.userId] || {}), ...data.user };
+          refreshSeatsVisuals();
+          updateSkipVoteUI();
+          showToast(`✨ Khán giả "${data.user.name}" vừa cập nhật hồ sơ!`);
         }
         break;
 
@@ -1924,17 +2014,67 @@
     }
   }
 
+  let currentWsUrl = '';
+
+  function getTargetWsUrl() {
+    // 1. URL Query Param ?ws=...
+    const paramWs = urlParams.get('ws');
+    if (paramWs) return paramWs;
+
+    // 2. Saved custom URL in localStorage
+    const savedWs = localStorage.getItem('hanzu_cinema_ws_url');
+    if (savedWs) return savedWs;
+
+    // 3. Localhost or Local LAN host
+    const host = window.location.host;
+    const isLocal = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host) || /^10\./.test(host);
+    if (isLocal && host) {
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${proto}//${host}/ws`;
+    }
+
+    // 4. Default Production Cloud WebSocket Server (For GitHub Pages https://jhanzu.github.io/Cinema/)
+    return 'wss://cinema-8pqa.onrender.com/ws';
+  }
+
+  function updateServerStatusUI(status) {
+    const pill = document.getElementById('btnOpenServerSettings');
+    const label = document.getElementById('serverStatusText');
+    if (!pill || !label) return;
+
+    pill.classList.remove('online', 'connecting', 'offline');
+    if (status === 'online') {
+      pill.classList.add('online');
+      label.textContent = 'Máy chủ chung';
+      pill.title = `Đã kết nối máy chủ phòng chiếu: ${currentWsUrl} (Click để xem)`;
+    } else if (status === 'connecting') {
+      pill.classList.add('connecting');
+      label.textContent = 'Đang kết nối...';
+      pill.title = `Đang kết nối tới: ${currentWsUrl}`;
+    } else {
+      pill.classList.add('offline');
+      label.textContent = 'Ngoại tuyến';
+      pill.title = 'Chưa kết nối máy chủ chung. Click để cài đặt URL server.';
+    }
+  }
+
   function initRealtimeWebSocket() {
-    if (!window.location.host) return; // Opened as local file
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    currentWsUrl = getTargetWsUrl();
+    if (!currentWsUrl) return;
+
+    updateServerStatusUI('connecting');
 
     try {
-      wsClient = new WebSocket(wsUrl);
+      if (wsClient) {
+        try { wsClient.close(); } catch(e) {}
+      }
+
+      wsClient = new WebSocket(currentWsUrl);
 
       wsClient.onopen = () => {
         wsConnected = true;
         clearTimeout(wsReconnectTimer);
+        updateServerStatusUI('online');
         // Register client user with server room
         wsClient.send(JSON.stringify({
           type: 'INIT_USER',
@@ -1952,14 +2092,17 @@
       wsClient.onclose = () => {
         wsConnected = false;
         clearTimeout(wsReconnectTimer);
-        wsReconnectTimer = setTimeout(initRealtimeWebSocket, 2500);
+        updateServerStatusUI('offline');
+        wsReconnectTimer = setTimeout(initRealtimeWebSocket, 3500);
       };
 
       wsClient.onerror = () => {
         wsConnected = false;
+        updateServerStatusUI('offline');
       };
     } catch (e) {
       wsConnected = false;
+      updateServerStatusUI('offline');
     }
   }
 
@@ -2114,6 +2257,45 @@
         }
       } catch (e) {}
 
+      // Attach ?ws= URL parameter so anyone who clicks the link connects to the EXACT same server!
+      if (currentWsUrl && !currentWsUrl.includes('localhost') && !currentWsUrl.includes('127.0.0.1')) {
+        shareUrl += `&ws=${encodeURIComponent(currentWsUrl)}`;
+      }
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(shareUrl);
+      }
+      showToast(`🔗 Đã sao chép link rạp kèm máy chủ chung! Gửi ngay cho bạn bè để vào cùng phòng chiếu.`, 4800);
+    });
+
+    // Reaction Dock Buttons
+    document.querySelectorAll('[data-react]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        spawnSeatReaction3D(state.me.seat, btn.dataset.react, true, true);
+      });
+    });
+
+    // Toggle Cinema Lights Dimmer
+    document.getElementById('btnToggleLights')?.addEventListener('click', (e) => {
+      state.lightsDimmed = !state.lightsDimmed;
+      document.documentElement.style.setProperty('--cinema-dim', state.lightsDimmed ? '0.82' : '0.35');
+      e.currentTarget.classList.toggle('active', state.lightsDimmed);
+      showToast(state.lightsDimmed ? '🌑 Đã tắt bớt đèn rạp để tập trung xem' : '💡 Đã bật đèn rạp');
+    });
+
+    // Share Room Invite Link
+    document.getElementById('btnShareRoom')?.addEventListener('click', async () => {
+      let shareUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(state.roomCode)}`;
+      try {
+        const res = await fetch('/api/info');
+        if (res.ok) {
+          const info = await res.json();
+          if (['localhost', '127.0.0.1'].includes(window.location.hostname) && info.lanUrl) {
+            shareUrl = `${info.lanUrl}${window.location.pathname}?room=${encodeURIComponent(state.roomCode)}`;
+          }
+        }
+      } catch (e) {}
+
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(shareUrl);
       }
@@ -2136,20 +2318,68 @@
       });
     }
 
-    const openProfile = () => {
+    // Update Live Preview in Profile Modal
+    const updateProfilePreview = () => {
+      const pName = document.getElementById('previewName');
+      const pEmoji = document.getElementById('previewEmoji');
+      const pGender = document.getElementById('previewGenderTag');
+      const pSeat = document.getElementById('previewSeat');
+      if (pName) pName.textContent = state.me.name || 'Khán giả';
+      if (pEmoji) pEmoji.textContent = state.me.emoji || '😎';
+      if (pGender) pGender.textContent = state.me.gender === 'female' ? '👩' : (state.me.gender === 'other' ? '✨' : '👨');
+      if (pSeat) pSeat.textContent = state.me.seat || 'E5';
+    };
+
+    // Gender Card Selection
+    document.querySelectorAll('#genderSelectorGrid .gender-card').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#genderSelectorGrid .gender-card').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.me.gender = btn.dataset.gender;
+        if (state.me.gender === 'female') {
+          state.me.color = '#F43F5E';
+        } else if (state.me.gender === 'other') {
+          state.me.color = '#F59E0B';
+        } else {
+          state.me.color = '#38BDF8';
+        }
+        updateProfilePreview();
+      });
+    });
+
+    // Real-time name input preview
+    document.getElementById('inputProfileName')?.addEventListener('input', (e) => {
+      state.me.name = e.target.value.trim() || 'Khán giả';
+      updateProfilePreview();
+    });
+
+    const openProfile = (isOnboarding = false) => {
       profileModal?.classList.add('open');
+      const title = document.getElementById('profileModalTitle');
+      const submitBtn = document.getElementById('btnSubmitProfile');
+      if (title && submitBtn) {
+        if (isOnboarding) {
+          title.textContent = '✨ Chào mừng đến với Hanzu Cinema';
+          submitBtn.textContent = '🎬 Vào Rạp Chiếu Phim';
+        } else {
+          title.textContent = '✨ Hồ sơ khán giả & Chỗ ngồi';
+          submitBtn.textContent = 'Lưu thay đổi';
+        }
+      }
       const input = document.getElementById('inputProfileName');
       if (input) {
         input.value = state.me.name;
         input.focus();
+        input.select();
       }
+      updateProfilePreview();
     };
 
     const closeProfile = () => {
       profileModal?.classList.remove('open');
     };
 
-    document.getElementById('btnOpenProfile')?.addEventListener('click', openProfile);
+    document.getElementById('btnOpenProfile')?.addEventListener('click', () => openProfile(false));
     document.getElementById('btnCloseProfile')?.addEventListener('click', closeProfile);
 
     // Close modal on click outside
@@ -2167,8 +2397,8 @@
       const vipSeats = ['E4', 'E5', 'E6', 'E7', 'F4', 'F5', 'F6', 'F7'];
       const pick = vipSeats[Math.floor(Math.random() * vipSeats.length)];
       selectSeat(pick);
+      updateProfilePreview();
       saveProfileToStorage();
-      closeProfile();
     });
 
     document.getElementById('formSaveProfile')?.addEventListener('submit', (e) => {
@@ -2177,12 +2407,67 @@
       if (nameInput && nameInput.value.trim()) {
         state.me.name = nameInput.value.trim();
       }
+      state.me.hasConfigured = true;
       saveProfileToStorage();
       refreshSeatsVisuals();
       closeProfile();
-      showToast('✨ Đã cập nhật hồ sơ khán giả của bạn!');
+      sfx.playSeat();
+      showToast(`🎉 Chào mừng ${state.me.name} (${state.me.gender === 'female' ? 'Nữ 👩' : (state.me.gender === 'other' ? '✨' : 'Nam 👨')}) vào rạp Hanzu Cinema!`);
       broadcastSync({ type: 'SEAT_CHANGE', seat: state.me.seat, user: state.me });
+      broadcastSync({ type: 'PROFILE_UPDATE', user: state.me });
     });
+
+    // Server Settings Modal Event Handlers
+    const serverModal = document.getElementById('serverSettingsModal');
+    const openServerSettings = () => {
+      serverModal?.classList.add('open');
+      const input = document.getElementById('inputCustomWsUrl');
+      if (input) input.value = currentWsUrl || getTargetWsUrl();
+    };
+    const closeServerSettings = () => {
+      serverModal?.classList.remove('open');
+    };
+
+    document.getElementById('btnOpenServerSettings')?.addEventListener('click', openServerSettings);
+    document.getElementById('btnCloseServerSettings')?.addEventListener('click', closeServerSettings);
+    serverModal?.addEventListener('click', (e) => {
+      if (e.target === serverModal) closeServerSettings();
+    });
+
+    document.getElementById('btnResetDefaultServer')?.addEventListener('click', () => {
+      localStorage.removeItem('hanzu_cinema_ws_url');
+      const input = document.getElementById('inputCustomWsUrl');
+      if (input) input.value = 'wss://cinema-8pqa.onrender.com/ws';
+      showToast('🔄 Đã đặt lại địa chỉ máy chủ mặc định.');
+    });
+
+    document.getElementById('btnConnectWsNow')?.addEventListener('click', () => {
+      const input = document.getElementById('inputCustomWsUrl');
+      const newUrl = input?.value.trim();
+      if (newUrl) {
+        localStorage.setItem('hanzu_cinema_ws_url', newUrl);
+        initRealtimeWebSocket();
+        showToast('⚡ Đang kết nối lại máy chủ...');
+      }
+    });
+
+    document.getElementById('btnSaveServerSettings')?.addEventListener('click', () => {
+      const input = document.getElementById('inputCustomWsUrl');
+      const newUrl = input?.value.trim();
+      if (newUrl) {
+        localStorage.setItem('hanzu_cinema_ws_url', newUrl);
+        initRealtimeWebSocket();
+      }
+      closeServerSettings();
+      showToast('💾 Đã lưu cấu hình máy chủ phòng chiếu!');
+    });
+
+    // Auto-open Onboarding Modal on first visit if not yet configured
+    if (!state.me.hasConfigured) {
+      setTimeout(() => {
+        openProfile(true);
+      }, 500);
+    }
 
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
