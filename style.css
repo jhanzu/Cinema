@@ -2746,3 +2746,103 @@ body.is-dragging-camera iframe,
   font-size: 0.75rem;
   color: var(--text-muted);
 }
+
+/* ==========================================================================
+   Video Rescue Card (Auto Fallback & Pop-out Synced Player)
+   ========================================================================== */
+.video-rescue-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 11, 24, 0.94);
+  backdrop-filter: blur(16px);
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: fadeIn 0.25s ease;
+}
+
+.video-rescue-card {
+  max-width: 500px;
+  width: 100%;
+  background: linear-gradient(145deg, rgba(26, 22, 56, 0.96), rgba(15, 17, 38, 0.98));
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.8), 0 0 35px rgba(168, 85, 247, 0.25);
+  border-radius: 18px;
+  padding: 24px 26px;
+  text-align: center;
+}
+
+.vrc-icon {
+  font-size: 2.8rem;
+  margin-bottom: 8px;
+}
+
+.vrc-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #F8FAFC;
+  margin-bottom: 8px;
+  letter-spacing: -0.01em;
+}
+
+.vrc-desc {
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: #CBD5E1;
+  margin-bottom: 20px;
+}
+
+.vrc-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vrc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 18px;
+  border-radius: 11px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.vrc-btn.primary {
+  background: linear-gradient(135deg, #8B5CF6, #EC4899);
+  color: #FFF;
+  box-shadow: 0 4px 18px rgba(236, 72, 153, 0.4);
+}
+
+.vrc-btn.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(236, 72, 153, 0.6);
+}
+
+.vrc-btn.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #E2E8F0;
+}
+
+.vrc-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.16);
+  transform: translateY(-2px);
+}
+
+.vrc-btn.text-btn {
+  background: transparent;
+  color: #94A3B8;
+  font-size: 0.8rem;
+  padding: 6px;
+}
+
+.vrc-btn.text-btn:hover {
+  color: #CBD5E1;
+}

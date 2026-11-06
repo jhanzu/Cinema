@@ -160,9 +160,32 @@ function advanceRoomQueue(reasonText) {
 // =============================================================================
 // HTTP STATIC SERVER + REST API
 // =============================================================================
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = decodeURIComponent(parsedUrl.pathname);
+
+  // API: Search alternative YouTube videos for embed-blocked songs
+  if (pathname === '/api/search-alt') {
+    const q = parsedUrl.searchParams.get('q') || '';
+    const exclude = parsedUrl.searchParams.get('exclude') || '';
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=UTF-8',
+      'Access-Control-Allow-Origin': '*'
+    });
+    if (!q) return res.end(JSON.stringify({ videoIds: [] }));
+    try {
+      const ytUrl = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
+      const resp = await fetch(ytUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+      });
+      const html = await resp.text();
+      const matches = [...html.matchAll(/\/watch\?v=([a-zA-Z0-9_-]{11})/g)].map((m) => m[1]);
+      const unique = [...new Set(matches)].filter((id) => id !== exclude);
+      return res.end(JSON.stringify({ videoIds: unique.slice(0, 8) }));
+    } catch (err) {
+      return res.end(JSON.stringify({ videoIds: [], error: err.message }));
+    }
+  }
 
   // API: Get Server & Network Info for Friends Invite Link
   if (pathname === '/api/info') {

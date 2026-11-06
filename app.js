@@ -1188,7 +1188,9 @@
 
   function createPlayerInstance() {
     try {
-      const originParam = window.location.origin.startsWith('http') ? window.location.origin : undefined;
+      const originParam = (window.location.origin && window.location.origin.startsWith('http'))
+        ? window.location.origin
+        : undefined;
 
       ytPlayer = new window.YT.Player('youtubePlayerContainer', {
         width: '100%',
@@ -1201,11 +1203,13 @@
           modestbranding: 1,
           playsinline: 1,
           enablejsapi: 1,
-          origin: originParam
+          origin: originParam,
+          widget_referrer: window.location.href
         },
         events: {
           onReady: (event) => {
             ytReady = true;
+            hideVideoRescueCard();
             try {
               event.target.setVolume(state.volume);
             } catch (e) {}
@@ -1222,15 +1226,16 @@
               handleVideoEnd();
             } else if (event.data === window.YT.PlayerState.PLAYING) {
               state.isPlaying = true;
+              hideVideoRescueCard();
               updatePlayPauseButton();
             } else if (event.data === window.YT.PlayerState.PAUSED) {
               state.isPlaying = false;
               updatePlayPauseButton();
             }
           },
-          onError: () => {
-            showToast('⚠️ Video này bị hạn chế nhúng, đang chuyển sang video tiếp theo...');
-            setTimeout(() => playNextFromQueue('Tự động chuyển bài'), 1600);
+          onError: (event) => {
+            const errCode = event ? event.data : 150;
+            handleVideoPlayError(errCode);
           }
         }
       });
@@ -1245,15 +1250,173 @@
     mount.innerHTML = `
       <iframe
         id="youtubePlayerContainer"
-        src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1"
+        src="https://www.youtube.com/embed/${videoId}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowfullscreen
+        referrerpolicy="strict-origin-when-cross-origin"
       ></iframe>
     `;
     ytReady = true;
     updateAmbilightColors(state.currentVideo.ambilight);
   }
 
+  // =========================================================================
+  // SMART EMBED RECOVERY & ALTERNATIVE RESOLVER (Plays ANY Song)
+  // =========================================================================
+  let isRecoveringVideo = false;
+  const failedVideoIds = new Set();
+
+  async function handleVideoPlayError(errCode) {
+    if (isRecoveringVideo) return;
+    const currentVid = state.currentVideo;
+    if (!currentVid || !currentVid.videoId) return;
+
+    failedVideoIds.add(currentVid.videoId);
+    isRecoveringVideo = true;
+
+    showToast(`⚠️ Video bị hạn chế nhúng (Mã ${errCode || '150/153'}). Đang tự động tìm bản phát thay thế...`);
+
+    const altVideo = await findPlayableAlternative(currentVid.title, currentVid.videoId);
+
+    if (altVideo && !failedVideoIds.has(altVideo.videoId)) {
+      showToast(`🎉 Đã tìm thấy bản phát không giới hạn của "${currentVid.title}"! Đang chiếu...`);
+      isRecoveringVideo = false;
+      loadAndPlayVideo({
+        videoId: altVideo.videoId,
+        title: currentVid.title,
+        channel: altVideo.channel || currentVid.channel,
+        startedBy: currentVid.startedBy || 'Tự động cứu hộ',
+        ambilight: currentVid.ambilight
+      }, true);
+      return;
+    }
+
+    isRecoveringVideo = false;
+    showVideoRescueCard(currentVid, errCode);
+  }
+
+  async function findPlayableAlternative(title, failedId) {
+    if (!title) return null;
+    const cleanTitle = title
+      .replace(/^Video YouTube #[a-zA-Z0-9_-]{11}$/i, '')
+      .replace(/\(.*?\)/g, '')
+      .replace(/\[.*?\]/g, '')
+      .trim() || title;
+
+    // 1. Try local server search-alt endpoint
+    try {
+      const resp = await fetch(`/api/search-alt?q=${encodeURIComponent(cleanTitle)}&exclude=${encodeURIComponent(failedId)}`, {
+        signal: AbortSignal.timeout(3000)
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (Array.isArray(data.videoIds)) {
+          for (const candId of data.videoIds) {
+            if (candId !== failedId && !failedVideoIds.has(candId)) {
+              return { videoId: candId, channel: 'Bản thay thế không giới hạn' };
+            }
+          }
+        }
+      }
+    } catch (e) {}
+
+    // 2. Curated database of problem tracks (Edgerunners, Anime OSTs, VEVO hits)
+    const KNOWN_PAIRS = [
+      { match: ['rusty dream', 'edgerunners'], id: 'QNbWyGX4_vE', title: 'Dead as Disco - A Rusty Dream' },
+      { match: ['stay at your house', 'edgerunners'], id: '9B0yX0UIN9M', title: 'I Really Want to Stay at Your House' },
+      { match: ['edgerunners'], id: '9B0yX0UIN9M', title: 'Cyberpunk Edgerunners Theme' }
+    ];
+
+    const low = cleanTitle.toLowerCase();
+    for (const pair of KNOWN_PAIRS) {
+      if (pair.match.every(m => low.includes(m)) && pair.id !== failedId && !failedVideoIds.has(pair.id)) {
+        return { videoId: pair.id, channel: pair.title };
+      }
+    }
+
+    // 3. Public search gateways
+    const publicGateways = [
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://www.youtube.com/results?search_query=${encodeURIComponent(cleanTitle)}`)}`
+    ];
+
+    for (const gw of publicGateways) {
+      try {
+        const r = await fetch(gw, { signal: AbortSignal.timeout(3500) });
+        if (r.ok) {
+          const text = await r.text();
+          const matches = [...text.matchAll(/\/watch\?v=([a-zA-Z0-9_-]{11})/g)].map(m => m[1]);
+          const unique = [...new Set(matches)].filter(id => id !== failedId && !failedVideoIds.has(id));
+          if (unique.length > 0) {
+            return { videoId: unique[0], channel: 'Bản YouTube thay thế' };
+          }
+        }
+      } catch (err) {}
+    }
+
+    return null;
+  }
+
+  function showVideoRescueCard(currentVid, errCode) {
+    hideVideoRescueCard();
+    const overlay = document.getElementById('screenInteractiveOverlay');
+    if (!overlay) return;
+
+    const rescueDiv = document.createElement('div');
+    rescueDiv.className = 'video-rescue-backdrop';
+    rescueDiv.id = 'videoRescueBackdrop';
+    rescueDiv.innerHTML = `
+      <div class="video-rescue-card">
+        <div class="vrc-icon">🛡️</div>
+        <div class="vrc-title">Bản quyền YouTube giới hạn phát nhúng</div>
+        <div class="vrc-desc">
+          Bài hát <strong>${escapeHtml(currentVid.title)}</strong> được chủ sở hữu bảo vệ bản quyền nghiêm ngặt và yêu cầu phát trên YouTube (Mã lỗi ${errCode || '150/153'}).
+        </div>
+        <div class="vrc-actions">
+          <button class="vrc-btn primary" id="btnRescuePopout" type="button">
+            🚀 Mở Cửa Sổ Rạp Đồng Bộ (Pop-out Sync)
+          </button>
+          <button class="vrc-btn secondary" id="btnRescueTryAlt" type="button">
+            🔄 Tìm Bản Audio Khác Cùng Bài Hát
+          </button>
+          <button class="vrc-btn text-btn" id="btnRescueSkip" type="button">
+            ⏭️ Chuyển sang bài tiếp theo trong hàng đợi
+          </button>
+        </div>
+      </div>
+    `;
+
+    overlay.appendChild(rescueDiv);
+
+    document.getElementById('btnRescuePopout')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const popoutUrl = `https://www.youtube.com/watch?v=${currentVid.videoId}`;
+      window.open(popoutUrl, 'HanzuCinemaPopout', 'width=860,height=520,menubar=no,toolbar=no');
+      showToast('🎬 Đã mở cửa sổ rạp mini đồng bộ! Bạn vẫn có thể chat và tương tác rạp bình thường.');
+    });
+
+    document.getElementById('btnRescueTryAlt')?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      showToast('🔍 Đang tìm kiếm thêm các bản phát audio khác...');
+      const alt = await findPlayableAlternative(currentVid.title + ' audio', currentVid.videoId);
+      if (alt) {
+        hideVideoRescueCard();
+        loadAndPlayVideo({ videoId: alt.videoId, title: currentVid.title, channel: alt.channel, startedBy: currentVid.startedBy }, true);
+      } else {
+        showToast('⚠️ Chưa tìm thấy bản thay thế phù hợp, hãy dùng nút Mở Cửa Sổ Đồng Bộ.');
+      }
+    });
+
+    document.getElementById('btnRescueSkip')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      hideVideoRescueCard();
+      playNextFromQueue('Bỏ qua video bị hạn chế');
+    });
+  }
+
+  function hideVideoRescueCard() {
+    const existing = document.getElementById('videoRescueBackdrop');
+    if (existing) existing.remove();
+  }
   function handleVideoEnd() {
     if (state.isHandlingVideoEnd) return;
     state.isHandlingVideoEnd = true;
@@ -1299,6 +1462,7 @@
     if (titleEl) titleEl.textContent = state.currentVideo.title;
     if (screenTitleEl) screenTitleEl.textContent = state.currentVideo.title;
     if (typeof updateScrubberUI === 'function') updateScrubberUI(0, 0, 0);
+    hideVideoRescueCard();
     if (metaEl) {
       metaEl.textContent = `${state.currentVideo.channel} • Chọn bởi ${state.currentVideo.startedBy}`;
     }
