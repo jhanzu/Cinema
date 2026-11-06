@@ -201,7 +201,7 @@
     },
     isPlaying: true,
     isMuted: false,
-    volume: 75,
+    volume: 25,
     skipVotes: new Set(),
     isHandlingVideoEnd: false,
 
@@ -362,7 +362,8 @@
                 <button class="ctrl-btn" id="btnMuteToggle" title="Bật / Tắt tiếng (Phím M)">
                   🔊
                 </button>
-                <input type="range" min="0" max="100" value="${state.volume}" class="volume-slider" id="volumeSlider" title="Âm lượng rạp" />
+                <input type="range" min="0" max="100" value="${state.volume}" class="volume-slider" id="volumeSlider" title="Âm lượng: ${state.volume}%" />
+                <span id="volumeValueLabel" class="volume-label">${state.volume}%</span>
                 <button class="ctrl-btn vote-skip" id="btnVoteSkip" title="Bỏ phiếu chuyển sang video #1 trong hàng đợi (Cần 30% khán giả vote)">
                   ⏭️ Qua bài (<span id="skipVoteCounter">0/1</span>)
                 </button>
@@ -1213,6 +1214,7 @@
     if (ytReady && ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
       try {
         ytPlayer.loadVideoById(state.currentVideo.videoId);
+        ytPlayer.setVolume(state.volume);
       } catch (e) {
         createFallbackIframe(state.currentVideo.videoId);
       }
@@ -2357,6 +2359,9 @@
 
     document.getElementById('volumeSlider')?.addEventListener('input', (e) => {
       state.volume = Number(e.target.value);
+      e.target.title = `Âm lượng: ${state.volume}%`;
+      const valLabel = document.getElementById('volumeValueLabel');
+      if (valLabel) valLabel.textContent = `${state.volume}%`;
       if (ytReady && ytPlayer && typeof ytPlayer.setVolume === 'function') {
         try {
           ytPlayer.setVolume(state.volume);

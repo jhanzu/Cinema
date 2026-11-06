@@ -1385,6 +1385,14 @@ body.is-dragging-camera iframe,
   cursor: pointer;
 }
 
+.volume-label {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  min-width: 28px;
+  user-select: none;
+}
+
 /* Reaction Cannon Dock */
 .reaction-dock {
   display: flex;
@@ -2107,6 +2115,9 @@ body.is-dragging-camera iframe,
   }
   .volume-slider {
     width: 50px;
+  }
+  .volume-label {
+    display: none;
   }
 }
 
