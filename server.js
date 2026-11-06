@@ -34,39 +34,12 @@ const MIME_TYPES = {
 const INITIAL_QUEUE = [
   {
     id: 'q-1',
-    videoId: '5qap5aO4i9A',
-    title: 'Synthwave Radio - Chill Synth / Retro Music',
-    channel: 'Lofi Girl Synthwave',
-    addedBy: 'Minh Anh (E4)',
-    votes: 5,
-    ambilight: ['#38BDF8', '#8B5CF6']
-  },
-  {
-    id: 'q-2',
-    videoId: 'rUxyKA_-grg',
-    title: 'Sleepy Fish - Chillhop Essentials Night Session',
-    channel: 'Chillhop Music',
-    addedBy: 'Hải Đăng (F7)',
-    votes: 3,
-    ambilight: ['#06B6D4', '#3B82F6']
-  },
-  {
-    id: 'q-3',
-    videoId: 'n61ULEU7CO0',
-    title: 'Best of Ghibli Piano Medley - Soothing Anime Ost',
-    channel: 'Anime Piano Room',
-    addedBy: 'Bảo Ngọc (D5)',
-    votes: 2,
-    ambilight: ['#10B981', '#38BDF8']
-  },
-  {
-    id: 'q-4',
-    videoId: 'K4DyBUG242c',
-    title: 'Cartoon - On & On (feat. Daniel Levi) [NCS Release]',
-    channel: 'NoCopyrightSounds',
-    addedBy: 'Tuấn Kiệt (G3)',
+    videoId: '9B0yX0UIN9M',
+    title: 'I Really Want to Stay at Your House',
+    channel: 'Samuel Kim, Lorien - Topic',
+    addedBy: 'Hanzu Cinema',
     votes: 1,
-    ambilight: ['#8B5CF6', '#38BDF8']
+    ambilight: ['#38BDF8', '#EC4899']
   }
 ];
 
@@ -74,11 +47,11 @@ const INITIAL_QUEUE = [
 const roomState = {
   code: 'rap-chung-minh',
   currentVideo: {
-    videoId: 'jfKfPfyJRdk',
-    title: 'lofi hip hop radio - beats to relax/study to',
-    channel: 'Lofi Girl',
-    startedBy: 'Hệ thống rạp',
-    ambilight: ['#3B82F6', '#8B5CF6'],
+    videoId: '9B0yX0UIN9M',
+    title: 'I Really Want to Stay at Your House',
+    channel: 'Samuel Kim, Lorien - Topic',
+    startedBy: 'Hanzu Cinema',
+    ambilight: ['#38BDF8', '#EC4899'],
     isPlaying: true,
     startTime: Date.now()
   },

@@ -26,79 +26,22 @@
 
   const PRESET_VIDEOS = [
     {
-      videoId: 'jfKfPfyJRdk',
-      title: 'lofi hip hop radio - beats to relax/study to',
-      channel: 'Lofi Girl',
-      ambilight: ['#3B82F6', '#8B5CF6']
-    },
-    {
-      videoId: '5qap5aO4i9A',
-      title: 'Synthwave Radio - Chill Synth / Retro Music',
-      channel: 'Lofi Girl Synthwave',
-      ambilight: ['#06B6D4', '#EC4899']
-    },
-    {
-      videoId: 'DWcJFNfaw9c',
-      title: 'Ambient Space Cinema - Deep Relaxing Visuals 4K',
-      channel: 'Space Ambient',
-      ambilight: ['#3B82F6', '#10B981']
-    },
-    {
-      videoId: '4xDzrJKXOOY',
-      title: 'Cyberpunk Night Drive - Retro Future Beats',
-      channel: 'Chillsynth FM',
-      ambilight: ['#F59E0B', '#E11D48']
-    },
-    {
-      videoId: 'n61ULEU7CO0',
-      title: 'Best of Ghibli Piano Medley - Soothing Anime Ost',
-      channel: 'Anime Piano Room',
-      ambilight: ['#10B981', '#F59E0B']
-    },
-    {
-      videoId: 'rUxyKA_-grg',
-      title: 'Sleepy Fish - Chillhop Essentials Night Session',
-      channel: 'Chillhop Music',
-      ambilight: ['#06B6D4', '#3B82F6']
+      videoId: '9B0yX0UIN9M',
+      title: 'I Really Want to Stay at Your House',
+      channel: 'Samuel Kim, Lorien - Topic',
+      ambilight: ['#38BDF8', '#EC4899']
     }
   ];
 
   const INITIAL_QUEUE = [
     {
       id: 'q-1',
-      videoId: '4xDzrJKXOOY',
-      title: 'Synthwave Radio 🌌 - chill retro / night drive beats',
-      channel: 'Lofi Girl',
-      addedBy: 'Hệ thống rạp',
-      votes: 5,
-      ambilight: ['#EC4899', '#8B5CF6']
-    },
-    {
-      id: 'q-2',
-      videoId: 'rUxyKA_-grg',
-      title: 'Sleepy Fish - Chillhop Essentials Night Session',
-      channel: 'Chillhop Music',
-      addedBy: 'Hệ thống rạp',
-      votes: 3,
-      ambilight: ['#06B6D4', '#3B82F6']
-    },
-    {
-      id: 'q-3',
-      videoId: 'n61ULEU7CO0',
-      title: 'Best of Ghibli Piano Medley - Soothing Anime Ost',
-      channel: 'Anime Piano Room',
-      addedBy: 'Hệ thống rạp',
-      votes: 2,
-      ambilight: ['#10B981', '#F59E0B']
-    },
-    {
-      id: 'q-4',
-      videoId: 'K4DyBUG242c',
-      title: 'Cartoon - On & On (feat. Daniel Levi) [NCS Release]',
-      channel: 'NoCopyrightSounds',
-      addedBy: 'Hệ thống rạp',
+      videoId: '9B0yX0UIN9M',
+      title: 'I Really Want to Stay at Your House',
+      channel: 'Samuel Kim, Lorien - Topic',
+      addedBy: 'Hanzu Cinema',
       votes: 1,
-      ambilight: ['#FF4E45', '#F59E0B']
+      ambilight: ['#38BDF8', '#EC4899']
     }
   ];
 
@@ -250,11 +193,11 @@
 
     // Current Video & YouTube Player State
     currentVideo: {
-      videoId: 'jfKfPfyJRdk',
-      title: 'lofi hip hop radio - beats to relax/study to',
-      channel: 'Lofi Girl',
-      startedBy: 'Hệ thống rạp',
-      ambilight: ['#3B82F6', '#8B5CF6']
+      videoId: '9B0yX0UIN9M',
+      title: 'I Really Want to Stay at Your House',
+      channel: 'Samuel Kim, Lorien - Topic',
+      startedBy: 'Hanzu Cinema',
+      ambilight: ['#38BDF8', '#EC4899']
     },
     isPlaying: true,
     isMuted: false,
@@ -605,6 +548,8 @@
   // =========================================================================
   // 5. 3D 100-SEAT AUDITORIUM RENDERER & HIGH PERFORMANCE VISUAL SYNC
   // =========================================================================
+  const seatNodeCache = {};
+
   function build100Seats3D() {
     const container = document.getElementById('seatsAuditorium3D');
     if (!container) return;
@@ -690,6 +635,10 @@
         });
 
         container.appendChild(seatNode);
+        seatNodeCache[seatCode] = {
+          node3D: seatNode,
+          slot: seatNode.querySelector('.seat-avatar-slot')
+        };
       });
     });
 
@@ -721,8 +670,9 @@
     ROWS.forEach((rowLetter) => {
       COLS.forEach((colNum) => {
         const code = `${rowLetter}${colNum}`;
-        const node3D = document.getElementById(`seat-3d-${code}`);
-        const slot = document.getElementById(`avatar-slot-${code}`);
+        const cached = seatNodeCache[code];
+        const node3D = cached ? cached.node3D : document.getElementById(`seat-3d-${code}`);
+        const slot = cached ? cached.slot : document.getElementById(`avatar-slot-${code}`);
         if (!node3D || !slot) return;
 
         const person = occupants[code];
@@ -805,7 +755,9 @@
     const chatInput = document.getElementById('inputChatMessage');
     if (chatInput) chatInput.placeholder = `Nhắn gì đó (sẽ hiện trên đầu ghế ${state.me.seat})...`;
 
-    render2DSeatMap(occupants);
+    if (state.activeTab === 'seats') {
+      render2DSeatMap(occupants);
+    }
     updateSkipVoteUI();
   }
 
@@ -968,6 +920,7 @@
         scale(${currentScale})
         rotateX(${state.rotX.toFixed(2)}deg)
         rotateY(${state.rotY.toFixed(2)}deg)
+        translate3d(0, 0, 0)
       `;
     }
   }
@@ -1875,9 +1828,18 @@
 
       case 'HEARTBEAT':
         if (data.user && data.user.id && data.user.id !== state.me.id) {
+          const prev = state.peers[data.user.id];
+          const hasChange = !prev ||
+            prev.seat !== data.user.seat ||
+            prev.name !== data.user.name ||
+            prev.gender !== data.user.gender ||
+            prev.emoji !== data.user.emoji ||
+            prev.color !== data.user.color;
           state.peers[data.user.id] = data.user;
           peerLastSeen[data.user.id] = Date.now();
-          refreshSeatsVisuals();
+          if (hasChange) {
+            refreshSeatsVisuals();
+          }
         }
         break;
 
@@ -2328,6 +2290,9 @@
         document.querySelectorAll('.sidebar-panel').forEach((p) =>
           p.classList.toggle('active', p.id === `panel-${state.activeTab}`)
         );
+        if (state.activeTab === 'seats') {
+          render2DSeatMap(getOccupantMap());
+        }
       });
     });
 
@@ -2732,7 +2697,7 @@
       frameCount++;
       const elapsed = now - lastTime;
       if (elapsed >= 500) {
-        const fps = Math.min(60, Math.round((frameCount * 1000) / elapsed));
+        const fps = Math.round((frameCount * 1000) / elapsed);
         if (fpsValueEl) {
           fpsValueEl.textContent = `${fps} FPS`;
           if (fps >= 55) {

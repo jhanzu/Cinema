@@ -406,14 +406,15 @@ body.is-dragging-camera iframe,
     radial-gradient(ellipse 68% 44% at 50% 18%, var(--ambilight-1), transparent 72%),
     radial-gradient(ellipse 55% 40% at 32% 26%, var(--ambilight-2), transparent 75%);
   opacity: calc(1 - var(--cinema-dim));
-  filter: blur(46px);
-  will-change: transform, opacity;
+  filter: blur(36px);
+  transform: translate3d(0, 0, 0);
+  will-change: opacity;
   animation: ambilightBreathe 7s ease-in-out infinite alternate;
 }
 
 @keyframes ambilightBreathe {
-  0% { transform: scale(1); opacity: calc((1 - var(--cinema-dim)) * 0.88); }
-  100% { transform: scale(1.04); opacity: calc(1 - var(--cinema-dim)); }
+  0% { opacity: calc((1 - var(--cinema-dim)) * 0.84); }
+  100% { opacity: calc(1 - var(--cinema-dim)); }
 }
 
 .cinema-darkness-overlay {
@@ -446,8 +447,10 @@ body.is-dragging-camera iframe,
   position: relative;
   transform-style: preserve-3d;
   will-change: transform;
-  transform: translateZ(0);
+  transform: translate3d(0, 0, 0);
   transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .theater-world.dragging {
@@ -591,6 +594,10 @@ body.is-dragging-camera iframe,
   left: 40px;
   top: 379px;
   transform-style: preserve-3d;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .seat-3d-node {
@@ -599,12 +606,18 @@ body.is-dragging-camera iframe,
   height: 56px;
   transform-style: preserve-3d;
   cursor: pointer;
-  transition: transform 0.22s ease, filter 0.2s ease;
   contain: layout style;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .seat-3d-node:hover {
   filter: brightness(1.3);
+}
+
+.seat-3d-node.my-seat,
+.seat-3d-node:hover {
+  transition: filter 0.18s ease;
 }
 
 /* ==========================================================================
@@ -615,7 +628,13 @@ body.is-dragging-camera iframe,
   inset: 0;
   transform-style: preserve-3d;
   pointer-events: none;
-  transition: transform 0.22s ease, filter 0.22s ease;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.seat-3d-node.my-seat .chair-3d-model,
+.seat-3d-node:hover .chair-3d-model {
+  transition: transform 0.18s ease;
 }
 
 /* 1. Volumetric 3D Backrest Box (Depth: 10px) */
@@ -989,6 +1008,7 @@ body.is-dragging-camera iframe,
   justify-content: center;
   position: relative;
   transform: translateZ(14px);
+  will-change: transform;
   animation: mannequinIdle 4s ease-in-out infinite alternate;
 }
 
