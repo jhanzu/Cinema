@@ -205,6 +205,14 @@
     skipVotes: new Set(),
     isHandlingVideoEnd: false,
 
+    // Auto Skip Ads State (60 FPS Safe, Fast-Forward & Instant Bypass)
+    autoSkipAds: localStorage.getItem('hanzu_cinema_auto_skip_ads') !== 'false',
+    isAdPlaying: false,
+    skippedAdsCount: 0,
+    lastAdBypassTime: 0,
+    preAdVolume: 25,
+    preAdRate: 1,
+
     // Voting Queue & History
     queue: [...INITIAL_QUEUE],
     history: [],
@@ -353,6 +361,12 @@
                         <span class="srb-text"></span>
                       </div>
 
+                      <!-- Auto Skip Ads Real-Time Badge -->
+                      <div class="ad-skip-indicator" id="adSkipIndicator">
+                        <span class="ad-skip-spinner">⚡</span>
+                        <span>Đang tự động bỏ qua quảng cáo...</span>
+                      </div>
+
                       <!-- Top Quick Bar (Title & Mode) -->
                       <div class="screen-top-quickbar">
                         <span class="stq-title" id="screenTopTitle">${escapeHtml(state.currentVideo.title)}</span>
@@ -407,6 +421,9 @@
                           </div>
 
                           <div class="yt-hud-right">
+                            <button class="yt-btn yt-adskip-btn ${state.autoSkipAds ? 'active' : ''}" id="btnToggleAutoSkipAds" type="button" title="Tự động bỏ qua quảng cáo (Click để bỏ qua ngay hoặc Bật/Tắt)">
+                              <span id="adSkipBtnIcon">${state.autoSkipAds ? '🛡️ Bỏ qua QC: BẬT' : '🛡️ Bỏ qua QC: TẮT'}</span>
+                            </button>
                             <button class="yt-btn yt-speed-btn" id="btnScreenSpeed" type="button" title="Tốc độ phát">
                               <span id="screenSpeedLabel">1x</span>
                             </button>
@@ -596,6 +613,13 @@
             <div style="margin-bottom:12px;">
               <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:6px;">Địa chỉ WebSocket Server (WSS):</label>
               <input type="text" class="text-input" id="inputCustomWsUrl" style="width:100%;font-family:monospace;font-size:0.8rem;" placeholder="wss://your-cinema-server.onrender.com/ws" />
+            </div>
+            <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);border-radius:10px;padding:9px 12px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;">
+              <div>
+                <div style="font-size:0.78rem;font-weight:700;color:#34D399;">🛡️ Tự động bỏ qua quảng cáo (Auto Skip Ads)</div>
+                <div style="font-size:0.7rem;color:var(--text-secondary);">Tự động tắt tiếng & tua tốc độ tối đa qua quảng cáo</div>
+              </div>
+              <input type="checkbox" id="checkModalAutoSkipAds" ${state.autoSkipAds ? 'checked' : ''} style="width:18px;height:18px;cursor:pointer;accent-color:#10B981;" />
             </div>
             <div style="display:flex;gap:8px;margin-bottom:14px;">
               <button type="button" class="icon-btn" id="btnResetDefaultServer" style="flex:1;">🔄 Mặc định Cloud</button>
@@ -1542,6 +1566,151 @@
     const existing = document.getElementById('videoRescueBackdrop');
     if (existing) existing.remove();
   }
+
+  // =========================================================================
+  // 7.1 AUTO SKIP ADS ENGINE (Real-Time Detection, Speed-Burst & Ad Bypass)
+  // =========================================================================
+  let adSkipLoopTimer = null;
+  let adDetectionStartTime = 0;
+
+  function updateAutoSkipAdsUI() {
+    const btn = document.getElementById('btnToggleAutoSkipAds');
+    const icon = document.getElementById('adSkipBtnIcon');
+    const check = document.getElementById('checkModalAutoSkipAds');
+    if (btn) btn.classList.toggle('active', !!state.autoSkipAds);
+    if (icon) {
+      icon.textContent = state.autoSkipAds
+        ? (state.skippedAdsCount > 0 ? `🛡️ Đã chặn ${state.skippedAdsCount} QC` : '🛡️ Bỏ qua QC: BẬT')
+        : '🛡️ Bỏ qua QC: TẮT';
+    }
+    if (check) check.checked = !!state.autoSkipAds;
+  }
+
+  function forceSkipAdNow() {
+    const ifrs = document.querySelectorAll('iframe[src*="youtube.com"]');
+    ifrs.forEach((ifr) => {
+      try {
+        ifr.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: 'seekTo', args: [999999, true] }), '*');
+        ifr.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: 'setPlaybackRate', args: [16] }), '*');
+        ifr.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: 'skipAd', args: [] }), '*');
+      } catch (_) {}
+    });
+
+    if (ytReady && ytPlayer) {
+      try {
+        if (typeof ytPlayer.setPlaybackRate === 'function') ytPlayer.setPlaybackRate(16);
+        const dur = typeof ytPlayer.getDuration === 'function' ? ytPlayer.getDuration() : 0;
+        if (dur > 0 && typeof ytPlayer.seekTo === 'function') {
+          ytPlayer.seekTo(dur, true);
+        }
+      } catch (_) {}
+    }
+  }
+
+  function startAutoAdSkipperEngine() {
+    // 1. Listen for YouTube player window message events
+    window.addEventListener('message', (e) => {
+      if (!state.autoSkipAds) return;
+      try {
+        const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+        if (!data) return;
+
+        if (data.event === 'infoDelivery' && data.info) {
+          const info = data.info;
+          const isAdActive = info.adState === 1 || info.isAdPlaying || (info.videoData && info.videoData.video_id && state.currentVideo?.videoId && info.videoData.video_id !== state.currentVideo.videoId);
+          if (isAdActive) {
+            handleAdDetected();
+          }
+        }
+      } catch (_) {}
+    });
+
+    // 2. High-frequency watcher loop (runs every 220ms)
+    if (adSkipLoopTimer) clearInterval(adSkipLoopTimer);
+    adSkipLoopTimer = setInterval(() => {
+      if (!state.autoSkipAds || !ytReady || !ytPlayer || !state.isPlaying) {
+        if (state.isAdPlaying) handleAdEnded();
+        return;
+      }
+
+      let isAd = false;
+      try {
+        if (typeof ytPlayer.getVideoData === 'function') {
+          const vd = ytPlayer.getVideoData();
+          if (vd && vd.video_id && state.currentVideo?.videoId && vd.video_id !== state.currentVideo.videoId) {
+            isAd = true;
+          }
+        }
+
+        if (!isAd && typeof ytPlayer.getDuration === 'function') {
+          const dur = ytPlayer.getDuration();
+          if (dur > 0 && dur <= 35 && state.currentVideo?.duration && state.currentVideo.duration > 60) {
+            isAd = true;
+          }
+        }
+      } catch (_) {}
+
+      if (isAd) {
+        handleAdDetected();
+      } else if (state.isAdPlaying) {
+        handleAdEnded();
+      }
+    }, 220);
+  }
+
+  function handleAdDetected() {
+    const indicator = document.getElementById('adSkipIndicator');
+    if (indicator) indicator.classList.add('show');
+
+    if (!state.isAdPlaying) {
+      state.isAdPlaying = true;
+      adDetectionStartTime = Date.now();
+      state.preAdVolume = state.volume || 25;
+      state.preAdRate = (state.playbackRate && state.playbackRate > 0) ? state.playbackRate : 1;
+
+      // Mute audio while ad is skipping
+      try {
+        ytPlayer?.mute();
+      } catch (_) {}
+    }
+
+    // Accelerate ad to 16x and seek to end
+    forceSkipAdNow();
+
+    // If ad remains stuck for > 2.2 seconds, execute seamless refresh bypass
+    const timeInAd = Date.now() - adDetectionStartTime;
+    if (timeInAd > 2200) {
+      if (!state.lastAdBypassTime || Date.now() - state.lastAdBypassTime > 6000) {
+        state.lastAdBypassTime = Date.now();
+        const cur = (ytPlayer && typeof ytPlayer.getCurrentTime === 'function') ? ytPlayer.getCurrentTime() : 0;
+        if (state.currentVideo?.videoId && typeof ytPlayer.loadVideoById === 'function') {
+          ytPlayer.loadVideoById(state.currentVideo.videoId, cur > 5 ? cur : 0);
+        }
+      }
+    }
+  }
+
+  function handleAdEnded() {
+    state.isAdPlaying = false;
+    const indicator = document.getElementById('adSkipIndicator');
+    if (indicator) indicator.classList.remove('show');
+
+    // Restore volume and speed
+    try {
+      if (ytPlayer) {
+        ytPlayer.setVolume(state.volume);
+        if (!state.isMuted) ytPlayer.unMute();
+        if (state.preAdRate && typeof ytPlayer.setPlaybackRate === 'function') {
+          ytPlayer.setPlaybackRate(state.preAdRate);
+        }
+      }
+    } catch (_) {}
+
+    state.skippedAdsCount = (state.skippedAdsCount || 0) + 1;
+    updateAutoSkipAdsUI();
+    showToast(`🛡️ Đã tự động bỏ qua quảng cáo! (Đã chặn: ${state.skippedAdsCount} QC)`, 3200);
+  }
+
   function handleVideoEnd() {
     if (state.isHandlingVideoEnd) return;
     state.isHandlingVideoEnd = true;
@@ -2946,6 +3115,30 @@
       }
     });
 
+    // Auto Skip Ads Button & Settings Toggle
+    document.getElementById('btnToggleAutoSkipAds')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (state.isAdPlaying) {
+        forceSkipAdNow();
+        showToast('⚡ Đang ép bỏ qua quảng cáo ngay lập tức...');
+        return;
+      }
+      state.autoSkipAds = !state.autoSkipAds;
+      localStorage.setItem('hanzu_cinema_auto_skip_ads', state.autoSkipAds ? 'true' : 'false');
+      updateAutoSkipAdsUI();
+      if (state.autoSkipAds) {
+        showToast('🛡️ Tính năng Tự động bỏ qua quảng cáo: ĐÃ BẬT');
+      } else {
+        showToast('⚠️ Tính năng Tự động bỏ qua quảng cáo: ĐÃ TẮT');
+      }
+    });
+
+    document.getElementById('checkModalAutoSkipAds')?.addEventListener('change', (e) => {
+      state.autoSkipAds = e.target.checked;
+      localStorage.setItem('hanzu_cinema_auto_skip_ads', state.autoSkipAds ? 'true' : 'false');
+      updateAutoSkipAdsUI();
+    });
+
     document.getElementById('btnScreenExternalYt')?.addEventListener('click', (e) => {
       e.stopPropagation();
       if (state.currentVideo && state.currentVideo.videoId) {
@@ -3525,6 +3718,8 @@
     setupSyncListener();
     startSimulatedAudienceEngine();
     updateSkipVoteUI();
+    startAutoAdSkipperEngine();
+    updateAutoSkipAdsUI();
     startFpsMonitor();
   }
 
