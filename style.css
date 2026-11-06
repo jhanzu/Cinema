@@ -570,6 +570,310 @@ body.is-dragging-camera iframe,
   display: block;
 }
 
+/* ==========================================================================
+   Interactive YouTube Screen Overlay & Controls HUD
+   ========================================================================== */
+.screen-interactive-overlay {
+  position: absolute;
+  top: 28px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  user-select: none;
+  cursor: pointer;
+  pointer-events: auto;
+  overflow: hidden;
+}
+
+.screen-interactive-overlay.user-idle {
+  cursor: none;
+}
+
+/* Center Clickable / Double-Click Gesture Zone */
+.screen-click-area {
+  flex: 1;
+  width: 100%;
+  cursor: pointer;
+}
+
+/* YouTube Ripple Feedback Badge */
+.screen-ripple-badge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0.6);
+  width: 86px;
+  height: 86px;
+  border-radius: 50%;
+  background: rgba(15, 17, 38, 0.88);
+  backdrop-filter: blur(14px);
+  border: 2px solid rgba(168, 85, 247, 0.6);
+  box-shadow: 0 0 35px rgba(168, 85, 247, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: transform 0.25s cubic-bezier(0.18, 0.89, 0.32, 1.28), opacity 0.25s ease;
+  z-index: 20;
+}
+
+.screen-ripple-badge.animate {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.15);
+}
+
+.screen-ripple-badge.left {
+  left: 28%;
+}
+
+.screen-ripple-badge.right {
+  left: 72%;
+}
+
+.srb-icon {
+  font-size: 2.1rem;
+  line-height: 1;
+}
+
+.srb-text {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #F3E8FF;
+  margin-top: 2px;
+}
+
+/* Top Quickbar */
+.screen-top-quickbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.8) 0%, transparent 100%);
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.28s ease, transform 0.28s ease;
+  pointer-events: none;
+}
+
+.screen-interactive-overlay:hover .screen-top-quickbar,
+.screen-interactive-overlay.user-active .screen-top-quickbar,
+.screen-interactive-overlay.is-paused .screen-top-quickbar {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.stq-title {
+  color: #F8FAFC;
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95);
+  max-width: 68%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stq-btn {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #FFF;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.stq-btn:hover {
+  background: rgba(168, 85, 247, 0.45);
+  transform: scale(1.04);
+}
+
+/* Bottom YouTube Controls HUD */
+.screen-yt-hud {
+  padding: 14px 16px 10px;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.6) 65%, transparent 100%);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.28s ease, transform 0.28s ease;
+  pointer-events: none;
+  cursor: default;
+}
+
+.screen-interactive-overlay:hover .screen-yt-hud,
+.screen-interactive-overlay.user-active .screen-yt-hud,
+.screen-interactive-overlay.is-paused .screen-yt-hud {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* YouTube Scrubber Progress Bar */
+.yt-scrubber-container {
+  width: 100%;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  position: relative;
+  cursor: pointer;
+}
+
+.yt-scrubber-track {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 2px;
+  position: relative;
+  transition: height 0.15s ease;
+}
+
+.yt-scrubber-container:hover .yt-scrubber-track,
+.yt-scrubber-container.is-scrubbing .yt-scrubber-track {
+  height: 7px;
+}
+
+.yt-scrubber-buffer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0%;
+  background: rgba(255, 255, 255, 0.42);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.yt-scrubber-played {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0%;
+  background: linear-gradient(90deg, #A855F7, #EC4899, #EF4444);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.yt-scrubber-handle {
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%) scale(0);
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #FFF;
+  box-shadow: 0 0 10px rgba(236, 72, 153, 0.95);
+  transition: transform 0.15s ease;
+}
+
+.yt-scrubber-container:hover .yt-scrubber-handle,
+.yt-scrubber-container.is-scrubbing .yt-scrubber-handle {
+  transform: translateY(-50%) scale(1);
+}
+
+.yt-scrubber-hover-preview {
+  position: absolute;
+  bottom: 22px;
+  transform: translateX(-50%);
+  background: rgba(15, 17, 38, 0.94);
+  border: 1px solid rgba(168, 85, 247, 0.5);
+  color: #FFF;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  white-space: nowrap;
+}
+
+.yt-scrubber-container:hover .yt-scrubber-hover-preview {
+  opacity: 1;
+}
+
+/* HUD Buttons Row */
+.yt-hud-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 5px;
+  gap: 12px;
+}
+
+.yt-hud-left,
+.yt-hud-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.yt-btn {
+  background: transparent;
+  border: none;
+  color: #F1F5F9;
+  font-size: 1.05rem;
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.yt-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #C084FC;
+  transform: scale(1.08);
+}
+
+.yt-time-display {
+  color: #E2E8F0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin-left: 4px;
+}
+
+.yt-volume-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.yt-volume-slider {
+  width: 0px;
+  opacity: 0;
+  accent-color: #EC4899;
+  cursor: pointer;
+  transition: width 0.22s ease, opacity 0.22s ease;
+}
+
+.yt-volume-group:hover .yt-volume-slider,
+.yt-volume-group:focus-within .yt-volume-slider {
+  width: 65px;
+  opacity: 1;
+}
+
+.yt-speed-btn {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
 /* Screen Reflection Stage Apron */
 .stage-apron {
   position: absolute;

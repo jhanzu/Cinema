@@ -344,6 +344,79 @@
                     <div class="yt-player-mount" id="ytPlayerMount">
                       <div id="youtubePlayerContainer"></div>
                     </div>
+
+                    <!-- YouTube Interactive Screen HUD Overlay -->
+                    <div class="screen-interactive-overlay user-active" id="screenInteractiveOverlay">
+                      <!-- Big Feedback Ripple Badge (Play/Pause/Seek) -->
+                      <div class="screen-ripple-badge" id="screenRippleBadge">
+                        <span class="srb-icon">▶️</span>
+                        <span class="srb-text"></span>
+                      </div>
+
+                      <!-- Top Quick Bar (Title & Mode) -->
+                      <div class="screen-top-quickbar">
+                        <span class="stq-title" id="screenTopTitle">${escapeHtml(state.currentVideo.title)}</span>
+                        <div class="stq-actions">
+                          <button class="stq-btn" id="btnScreenFocusMode" type="button" title="Chế độ Rạp IMAX cận cảnh (Phím tắt: T)">⛶ Rạp IMAX</button>
+                        </div>
+                      </div>
+
+                      <!-- Center Gesture & Click Area -->
+                      <div class="screen-click-area" id="screenClickArea"></div>
+
+                      <!-- Bottom YouTube Control HUD -->
+                      <div class="screen-yt-hud" id="screenYtHud">
+                        <!-- Scrubber / Progress Bar -->
+                        <div class="yt-scrubber-container" id="ytScrubberContainer">
+                          <div class="yt-scrubber-hover-preview" id="ytHoverPreview">0:00</div>
+                          <div class="yt-scrubber-track">
+                            <div class="yt-scrubber-buffer" id="ytScrubberBuffer"></div>
+                            <div class="yt-scrubber-played" id="ytScrubberPlayed">
+                              <div class="yt-scrubber-handle"></div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Buttons Row -->
+                        <div class="yt-hud-row">
+                          <div class="yt-hud-left">
+                            <button class="yt-btn" id="btnScreenPlayPause" type="button" title="Phát / Tạm dừng (Phím Space hoặc K)">
+                              <span id="screenPlayIcon">⏸️</span>
+                            </button>
+                            <button class="yt-btn" id="btnScreenRewind10" type="button" title="Tua lùi 10 giây (Phím J hoặc Mũi tên trái)">
+                              <span>⏪ 10s</span>
+                            </button>
+                            <button class="yt-btn" id="btnScreenForward10" type="button" title="Tua tiến 10 giây (Phím L hoặc Mũi tên phải)">
+                              <span>⏩ 10s</span>
+                            </button>
+                            <button class="yt-btn" id="btnScreenNextVideo" type="button" title="Bài tiếp theo trong hàng đợi">
+                              <span>⏭️</span>
+                            </button>
+                            <div class="yt-volume-group" id="screenVolumeGroup">
+                              <button class="yt-btn" id="btnScreenMute" type="button" title="Bật / Tắt tiếng (Phím M)">
+                                <span id="screenMuteIcon">🔊</span>
+                              </button>
+                              <input type="range" min="0" max="100" value="${state.volume}" class="yt-volume-slider" id="screenVolumeSlider" title="Âm lượng: ${state.volume}%" />
+                            </div>
+                            <div class="yt-time-display" id="screenTimeDisplay">
+                              <span id="screenCurrentTime">0:00</span> / <span id="screenTotalDuration">0:00</span>
+                            </div>
+                          </div>
+
+                          <div class="yt-hud-right">
+                            <button class="yt-btn yt-speed-btn" id="btnScreenSpeed" type="button" title="Tốc độ phát">
+                              <span id="screenSpeedLabel">1x</span>
+                            </button>
+                            <button class="yt-btn" id="btnScreenExternalYt" type="button" title="Mở trên YouTube trong tab mới">
+                              <span style="font-size: 0.82rem;">↗️ YouTube</span>
+                            </button>
+                            <button class="yt-btn" id="btnScreenFullscreen" type="button" title="Toàn màn hình (Phím F)">
+                              <span id="screenFsIcon">⛶</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   <div class="stage-apron"></div>
                 </div>
@@ -864,6 +937,12 @@
       if (hintEl) {
         hintEl.textContent = '🏟️ Toàn cảnh 100 ghế từ trên cao • Nhấp vào ghế bất kỳ để đổi vị trí';
       }
+    } else if (mode === 'focus') {
+      state.rotX = 5.2;
+      state.rotY = 0;
+      if (hintEl) {
+        hintEl.textContent = '🎬 Chế độ Rạp IMAX cận cảnh • Bấm phím T hoặc nhấp "Thoát IMAX" để quay lại';
+      }
     } else {
       state.rotX = -16;
       state.rotY = 0;
@@ -915,6 +994,14 @@
         rotateY(${povYaw.toFixed(2)}deg)
         translate3d(${translateX.toFixed(1)}px, ${translateY.toFixed(1)}px, 110px)
       `;
+    } else if (state.cameraMode === 'focus') {
+      const focusScale = (1.52 * state.baseScale).toFixed(3);
+      world.style.transform = `
+        scale(${focusScale})
+        rotateX(5.2deg)
+        rotateY(0deg)
+        translate3d(0px, 85px, 130px)
+      `;
     } else {
       const currentScale = (state.zoom * state.baseScale).toFixed(3);
       world.style.transform = `
@@ -948,7 +1035,8 @@
         e.target.closest('.viewport-hud-top') ||
         e.target.closest('.viewport-hud-bottom') ||
         e.target.closest('.seat-3d-node') ||
-        e.target.closest('.yt-player-mount')
+        e.target.closest('.yt-player-mount') ||
+        e.target.closest('.screen-interactive-overlay')
       ) {
         return;
       }
@@ -1204,7 +1292,10 @@
 
     const titleEl = document.getElementById('hudVideoTitle');
     const metaEl = document.getElementById('hudVideoMeta');
+    const screenTitleEl = document.getElementById('screenTopTitle');
     if (titleEl) titleEl.textContent = state.currentVideo.title;
+    if (screenTitleEl) screenTitleEl.textContent = state.currentVideo.title;
+    if (typeof updateScrubberUI === 'function') updateScrubberUI(0, 0, 0);
     if (metaEl) {
       metaEl.textContent = `${state.currentVideo.channel} • Chọn bởi ${state.currentVideo.startedBy}`;
     }
@@ -1243,8 +1334,18 @@
 
   function updatePlayPauseButton() {
     const btn = document.getElementById('btnPlayPause');
-    if (!btn) return;
-    btn.innerHTML = state.isPlaying ? '⏸️ Tạm dừng' : '▶️ Phát tiếp';
+    const screenPlayIcon = document.getElementById('screenPlayIcon');
+    const overlay = document.getElementById('screenInteractiveOverlay');
+
+    if (btn) {
+      btn.innerHTML = state.isPlaying ? '⏸️ Tạm dừng' : '▶️ Phát tiếp';
+    }
+    if (screenPlayIcon) {
+      screenPlayIcon.textContent = state.isPlaying ? '⏸️' : '▶️';
+    }
+    if (overlay) {
+      overlay.classList.toggle('is-paused', !state.isPlaying);
+    }
   }
 
   // =========================================================================
@@ -1816,6 +1917,9 @@
           if (data.currentVideo && data.currentVideo.videoId && (!state.currentVideo || !state.currentVideo.videoId)) {
             loadAndPlayVideo(data.currentVideo, false);
           }
+          if (typeof data.currentTime === 'number' && data.currentTime > 5 && ytReady && ytPlayer && typeof ytPlayer.seekTo === 'function') {
+            ytPlayer.seekTo(data.currentTime, true);
+          }
           if (Array.isArray(data.queue) && data.queue.length > 0) {
             state.queue = data.queue;
             renderQueue();
@@ -1895,6 +1999,8 @@
                 targetClientId: data.from || data.clientId,
                 occupants: getOccupantMap(),
                 currentVideo: state.currentVideo,
+                currentTime: (ytReady && ytPlayer && typeof ytPlayer.getCurrentTime === 'function') ? ytPlayer.getCurrentTime() : 0,
+                isPlaying: state.isPlaying,
                 queue: state.queue,
                 skipVotes: Array.from(state.skipVotes)
               }));
@@ -1998,10 +2104,27 @@
 
       case 'SYNC_PLAY_PAUSE':
         if (ytReady && ytPlayer) {
+          state.isPlaying = !!data.isPlaying;
           if (data.isPlaying && typeof ytPlayer.playVideo === 'function') {
             ytPlayer.playVideo();
           } else if (!data.isPlaying && typeof ytPlayer.pauseVideo === 'function') {
             ytPlayer.pauseVideo();
+          }
+          updatePlayPauseButton();
+          if (data.by && data.by !== state.me.name) {
+            showToast(data.isPlaying ? `▶️ ${escapeHtml(data.by)} đã tiếp tục phát` : `⏸️ ${escapeHtml(data.by)} đã tạm dừng video`);
+          }
+        }
+        break;
+
+      case 'SYNC_SEEK':
+        if (ytReady && ytPlayer && typeof ytPlayer.seekTo === 'function') {
+          const seekTime = Number(data.time) || 0;
+          ytPlayer.seekTo(seekTime, true);
+          const dur = (ytPlayer.getDuration && ytPlayer.getDuration()) || 0;
+          if (typeof updateScrubberUI === 'function') updateScrubberUI(seekTime, dur);
+          if (data.by && data.by !== state.me.name) {
+            showToast(`⏩ ${escapeHtml(data.by)} đã tua đến ${formatTime(seekTime)}`);
           }
         }
         break;
@@ -2325,34 +2448,321 @@
       });
     }
 
-    // Player Controls
-    document.getElementById('btnPlayPause')?.addEventListener('click', () => {
+    // YouTube Core Player Functions
+    function togglePlayPause() {
       if (!ytReady || !ytPlayer) {
         showToast('⏳ Trình phát đang khởi động...');
         return;
       }
       try {
         if (state.isPlaying) {
-          ytPlayer.pauseVideo();
-          broadcastSync({ type: 'SYNC_PLAY_PAUSE', isPlaying: false });
+          if (typeof ytPlayer.pauseVideo === 'function') ytPlayer.pauseVideo();
+          state.isPlaying = false;
+          broadcastSync({ type: 'SYNC_PLAY_PAUSE', isPlaying: false, by: state.me.name });
         } else {
-          ytPlayer.playVideo();
-          broadcastSync({ type: 'SYNC_PLAY_PAUSE', isPlaying: true });
+          if (typeof ytPlayer.playVideo === 'function') ytPlayer.playVideo();
+          state.isPlaying = true;
+          broadcastSync({ type: 'SYNC_PLAY_PAUSE', isPlaying: true, by: state.me.name });
         }
+        updatePlayPauseButton();
       } catch (e) {}
+    }
+
+    function seekRelative(deltaSeconds) {
+      if (!ytReady || !ytPlayer || typeof ytPlayer.getCurrentTime !== 'function') return;
+      const current = ytPlayer.getCurrentTime() || 0;
+      const duration = (ytPlayer.getDuration && ytPlayer.getDuration()) || 0;
+      const target = Math.max(0, Math.min(duration || Infinity, current + deltaSeconds));
+      ytPlayer.seekTo(target, true);
+      updateScrubberUI(target, duration);
+      broadcastSync({ type: 'SYNC_SEEK', time: target, by: state.me.name });
+    }
+
+    function seekToSeconds(targetSec, broadcast = true) {
+      if (!ytReady || !ytPlayer || typeof ytPlayer.seekTo !== 'function') return;
+      const duration = (ytPlayer.getDuration && ytPlayer.getDuration()) || 0;
+      const target = Math.max(0, Math.min(duration || Infinity, targetSec));
+      ytPlayer.seekTo(target, true);
+      updateScrubberUI(target, duration);
+      if (broadcast) {
+        broadcastSync({ type: 'SYNC_SEEK', time: target, by: state.me.name });
+      }
+    }
+
+    function toggleFullscreen() {
+      const vp = document.getElementById('cinemaViewport') || document.documentElement;
+      if (!document.fullscreenElement) {
+        if (vp.requestFullscreen) vp.requestFullscreen();
+        else if (vp.webkitRequestFullscreen) vp.webkitRequestFullscreen();
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      }
+    }
+
+    document.addEventListener('fullscreenchange', () => {
+      const icon = document.getElementById('screenFsIcon');
+      if (icon) icon.textContent = document.fullscreenElement ? '✕' : '⛶';
+    });
+
+    let rippleTimer = null;
+    function showRippleBadge(icon, text, position = 'center') {
+      const badge = document.getElementById('screenRippleBadge');
+      if (!badge) return;
+      badge.className = 'screen-ripple-badge';
+      const iconEl = badge.querySelector('.srb-icon');
+      const textEl = badge.querySelector('.srb-text');
+      if (iconEl) iconEl.textContent = icon;
+      if (textEl) textEl.textContent = text;
+      badge.classList.add('animate', position);
+      clearTimeout(rippleTimer);
+      rippleTimer = setTimeout(() => {
+        badge.className = 'screen-ripple-badge';
+      }, 650);
+    }
+
+    // Auto-hide screen HUD timer
+    let screenIdleTimer = null;
+    const screenOverlay = document.getElementById('screenInteractiveOverlay');
+    function wakeScreenControls() {
+      if (!screenOverlay) return;
+      screenOverlay.classList.remove('user-idle');
+      screenOverlay.classList.add('user-active');
+      clearTimeout(screenIdleTimer);
+      if (state.isPlaying) {
+        screenIdleTimer = setTimeout(() => {
+          screenOverlay.classList.remove('user-active');
+          screenOverlay.classList.add('user-idle');
+        }, 2800);
+      }
+    }
+
+    if (screenOverlay) {
+      screenOverlay.addEventListener('pointermove', wakeScreenControls);
+      screenOverlay.addEventListener('pointerdown', wakeScreenControls);
+      screenOverlay.addEventListener('mouseleave', () => {
+        if (state.isPlaying) {
+          screenOverlay.classList.remove('user-active');
+          screenOverlay.classList.add('user-idle');
+        }
+      });
+    }
+
+    // Single Click vs Double Click on Screen Center
+    const screenClickArea = document.getElementById('screenClickArea');
+    let screenClickTimer = null;
+    if (screenClickArea) {
+      screenClickArea.addEventListener('click', (e) => {
+        if (screenClickTimer) {
+          clearTimeout(screenClickTimer);
+          screenClickTimer = null;
+          // Double click detected
+          const rect = screenClickArea.getBoundingClientRect();
+          const clickX = e.clientX - rect.left;
+          const ratio = clickX / rect.width;
+          if (ratio < 0.35) {
+            seekRelative(-10);
+            showRippleBadge('⏪', '-10s', 'left');
+          } else if (ratio > 0.65) {
+            seekRelative(+10);
+            showRippleBadge('⏩', '+10s', 'right');
+          } else {
+            toggleFullscreen();
+          }
+        } else {
+          screenClickTimer = setTimeout(() => {
+            screenClickTimer = null;
+            togglePlayPause();
+            showRippleBadge(state.isPlaying ? '▶️' : '⏸️', state.isPlaying ? 'Đang phát' : 'Tạm dừng', 'center');
+          }, 240);
+        }
+      });
+    }
+
+    // Screen HUD Buttons
+    document.getElementById('btnScreenPlayPause')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      togglePlayPause();
+      showRippleBadge(state.isPlaying ? '▶️' : '⏸️', state.isPlaying ? 'Đang phát' : 'Tạm dừng', 'center');
+    });
+
+    document.getElementById('btnScreenRewind10')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      seekRelative(-10);
+      showRippleBadge('⏪', '-10s', 'left');
+    });
+
+    document.getElementById('btnScreenForward10')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      seekRelative(+10);
+      showRippleBadge('⏩', '+10s', 'right');
+    });
+
+    document.getElementById('btnScreenNextVideo')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      playNextFromQueue('Chuyển bài từ màn hình');
+    });
+
+    document.getElementById('btnScreenFullscreen')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleFullscreen();
+    });
+
+    document.getElementById('btnScreenFocusMode')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (state.cameraMode === 'focus') {
+        setCameraMode('orbit');
+        e.currentTarget.textContent = '⛶ Rạp IMAX';
+        showToast('🎥 Trở về góc nhìn rạp 3D');
+      } else {
+        setCameraMode('focus');
+        e.currentTarget.textContent = '↩️ Thoát IMAX';
+        showToast('🎬 Đã chuyển sang chế độ cận cảnh Rạp IMAX');
+      }
+    });
+
+    document.getElementById('btnScreenExternalYt')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (state.currentVideo && state.currentVideo.videoId) {
+        window.open('https://www.youtube.com/watch?v=' + state.currentVideo.videoId, '_blank');
+      }
+    });
+
+    // Playback Speed Selector (Cycles: 1x -> 1.25x -> 1.5x -> 2x -> 0.5x -> 0.75x)
+    const SPEED_LIST = [1, 1.25, 1.5, 2, 0.5, 0.75];
+    let currentSpeedIdx = 0;
+    document.getElementById('btnScreenSpeed')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!ytReady || !ytPlayer || typeof ytPlayer.setPlaybackRate !== 'function') return;
+      currentSpeedIdx = (currentSpeedIdx + 1) % SPEED_LIST.length;
+      const speed = SPEED_LIST[currentSpeedIdx];
+      try {
+        ytPlayer.setPlaybackRate(speed);
+        const lbl = document.getElementById('screenSpeedLabel');
+        if (lbl) lbl.textContent = `${speed}x`;
+        showToast(`⚡ Tốc độ phát: ${speed}x`);
+      } catch (err) {}
+    });
+
+    // Screen Mute Toggle
+    document.getElementById('btnScreenMute')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.getElementById('btnMuteToggle')?.click();
+    });
+
+    // Screen Volume Slider Sync
+    document.getElementById('screenVolumeSlider')?.addEventListener('input', (e) => {
+      e.stopPropagation();
+      const val = Number(e.target.value);
+      state.volume = val;
+      const bottomSlider = document.getElementById('volumeSlider');
+      if (bottomSlider) {
+        bottomSlider.value = val;
+        bottomSlider.title = `Âm lượng: ${val}%`;
+      }
+      const valLabel = document.getElementById('volumeValueLabel');
+      if (valLabel) valLabel.textContent = `${val}%`;
+
+      if (ytReady && ytPlayer && typeof ytPlayer.setVolume === 'function') {
+        try {
+          ytPlayer.setVolume(val);
+          const screenMuteIcon = document.getElementById('screenMuteIcon');
+          const muteBtn = document.getElementById('btnMuteToggle');
+          if (val > 0 && ytPlayer.isMuted()) {
+            ytPlayer.unMute();
+            state.isMuted = false;
+            if (muteBtn) muteBtn.textContent = '🔊';
+            if (screenMuteIcon) screenMuteIcon.textContent = '🔊';
+          } else if (val === 0) {
+            ytPlayer.mute();
+            state.isMuted = true;
+            if (muteBtn) muteBtn.textContent = '🔇';
+            if (screenMuteIcon) screenMuteIcon.textContent = '🔇';
+          }
+        } catch (err) {}
+      }
+    });
+
+    // YouTube Scrubber Dragging & Scrubbing
+    let isScrubbing = false;
+    const scrubberContainer = document.getElementById('ytScrubberContainer');
+    const hoverPreview = document.getElementById('ytHoverPreview');
+
+    if (scrubberContainer) {
+      const getScrubCalc = (clientX) => {
+        const rect = scrubberContainer.getBoundingClientRect();
+        const pos = Math.max(0, Math.min(rect.width, clientX - rect.left));
+        const ratio = rect.width > 0 ? pos / rect.width : 0;
+        const dur = (ytReady && ytPlayer && ytPlayer.getDuration && ytPlayer.getDuration()) || 0;
+        return { ratio, time: ratio * dur, pos };
+      };
+
+      scrubberContainer.addEventListener('mousemove', (e) => {
+        const calc = getScrubCalc(e.clientX);
+        if (hoverPreview) {
+          hoverPreview.textContent = formatTime(calc.time);
+          hoverPreview.style.left = `${calc.pos}px`;
+        }
+      });
+
+      scrubberContainer.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        isScrubbing = true;
+        scrubberContainer.classList.add('is-scrubbing');
+        const calc = getScrubCalc(e.clientX);
+        const dur = (ytReady && ytPlayer && ytPlayer.getDuration && ytPlayer.getDuration()) || 0;
+        updateScrubberUI(calc.time, dur);
+
+        const onPointerMove = (mEvt) => {
+          const moveCalc = getScrubCalc(mEvt.clientX);
+          updateScrubberUI(moveCalc.time, dur);
+        };
+
+        const onPointerUp = (uEvt) => {
+          isScrubbing = false;
+          scrubberContainer.classList.remove('is-scrubbing');
+          window.removeEventListener('pointermove', onPointerMove);
+          window.removeEventListener('pointerup', onPointerUp);
+          const upCalc = getScrubCalc(uEvt.clientX);
+          seekToSeconds(upCalc.time, true);
+        };
+
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+      });
+    }
+
+    // High frequency time & buffer tracker (every 250ms)
+    setInterval(() => {
+      if (!ytReady || !ytPlayer || !state.isPlaying || isScrubbing) return;
+      try {
+        const cur = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
+        const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
+        const buf = ytPlayer.getVideoLoadedFraction ? ytPlayer.getVideoLoadedFraction() : 0;
+        updateScrubberUI(cur, dur, buf);
+      } catch (err) {}
+    }, 250);
+
+    // Player Controls (Bottom Dock)
+    document.getElementById('btnPlayPause')?.addEventListener('click', () => {
+      togglePlayPause();
     });
 
     document.getElementById('btnMuteToggle')?.addEventListener('click', (e) => {
       if (!ytReady || !ytPlayer) return;
+      const screenMuteIcon = document.getElementById('screenMuteIcon');
       try {
         if (ytPlayer.isMuted()) {
           ytPlayer.unMute();
+          ytPlayer.setVolume(state.volume || 25);
           state.isMuted = false;
           e.currentTarget.textContent = '🔊';
+          if (screenMuteIcon) screenMuteIcon.textContent = '🔊';
         } else {
           ytPlayer.mute();
           state.isMuted = true;
           e.currentTarget.textContent = '🔇';
+          if (screenMuteIcon) screenMuteIcon.textContent = '🔇';
         }
       } catch (err) {}
     });
@@ -2637,13 +3047,36 @@
 
       if (e.key === 'Escape') {
         closeProfile();
-      } else if (e.key === ' ') {
+      } else if (e.key === ' ' || e.key === 'k' || e.key === 'K') {
         e.preventDefault();
-        document.getElementById('btnPlayPause')?.click();
+        togglePlayPause();
+        showRippleBadge(state.isPlaying ? '▶️' : '⏸️', state.isPlaying ? 'Đang phát' : 'Tạm dừng', 'center');
+      } else if (e.key === 'j' || e.key === 'J' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        seekRelative(-10);
+        showRippleBadge('⏪', '-10s', 'left');
+      } else if (e.key === 'l' || e.key === 'L' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        seekRelative(+10);
+        showRippleBadge('⏩', '+10s', 'right');
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const curVol = Math.min(100, (state.volume || 0) + 5);
+        const slider = document.getElementById('volumeSlider');
+        if (slider) { slider.value = curVol; slider.dispatchEvent(new Event('input')); }
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const curVol = Math.max(0, (state.volume || 0) - 5);
+        const slider = document.getElementById('volumeSlider');
+        if (slider) { slider.value = curVol; slider.dispatchEvent(new Event('input')); }
+      } else if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        toggleFullscreen();
+      } else if (e.key === 't' || e.key === 'T') {
+        e.preventDefault();
+        document.getElementById('btnScreenFocusMode')?.click();
       } else if (e.key === 'v' || e.key === 'V') {
         setCameraMode(state.cameraMode === 'pov' ? 'orbit' : 'pov');
-      } else if (e.key === 'l' || e.key === 'L') {
-        document.getElementById('btnToggleLights')?.click();
       } else if (e.key === 'm' || e.key === 'M') {
         document.getElementById('btnMuteToggle')?.click();
       } else if (['1', '2', '3', '4', '5', '6'].includes(e.key)) {
@@ -2674,6 +3107,38 @@
       item.style.transition = 'opacity 0.3s ease';
       setTimeout(() => item.remove(), 300);
     }, 3200);
+  }
+
+  function formatTime(totalSeconds) {
+    if (!totalSeconds || isNaN(totalSeconds) || totalSeconds < 0) return '0:00';
+    const hrs = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = Math.floor(totalSeconds % 60);
+    const padSec = secs < 10 ? '0' + secs : secs;
+    if (hrs > 0) {
+      const padMin = mins < 10 ? '0' + mins : mins;
+      return `${hrs}:${padMin}:${padSec}`;
+    }
+    return `${mins}:${padSec}`;
+  }
+
+  function updateScrubberUI(currentSec, totalSec, bufferFraction = 0) {
+    const playedBar = document.getElementById('ytScrubberPlayed');
+    const bufferBar = document.getElementById('ytScrubberBuffer');
+    const curTimeEl = document.getElementById('screenCurrentTime');
+    const totTimeEl = document.getElementById('screenTotalDuration');
+
+    if (curTimeEl) curTimeEl.textContent = formatTime(currentSec);
+    if (totTimeEl && totalSec > 0) totTimeEl.textContent = formatTime(totalSec);
+
+    if (totalSec > 0) {
+      const pct = Math.min(100, Math.max(0, (currentSec / totalSec) * 100));
+      if (playedBar) playedBar.style.width = `${pct}%`;
+    }
+    if (bufferBar && bufferFraction > 0) {
+      const bufPct = Math.min(100, Math.max(0, bufferFraction * 100));
+      bufferBar.style.width = `${bufPct}%`;
+    }
   }
 
   function getCurrentTimeStr() {

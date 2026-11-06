@@ -599,7 +599,17 @@ function handleClientMessage(ws, data) {
       roomState.currentVideo.isPlaying = !!data.isPlaying;
       broadcast({
         type: 'SYNC_PLAY_PAUSE',
-        isPlaying: roomState.currentVideo.isPlaying
+        isPlaying: roomState.currentVideo.isPlaying,
+        by: data.by || roomState.occupants[ws.userId]?.name
+      }, ws);
+      break;
+    }
+
+    case 'SYNC_SEEK': {
+      broadcast({
+        type: 'SYNC_SEEK',
+        time: data.time,
+        by: data.by || roomState.occupants[ws.userId]?.name
       }, ws);
       break;
     }
