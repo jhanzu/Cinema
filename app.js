@@ -410,8 +410,8 @@
                             <button class="yt-btn yt-speed-btn" id="btnScreenSpeed" type="button" title="Tốc độ phát">
                               <span id="screenSpeedLabel">1x</span>
                             </button>
-                            <button class="yt-btn" id="btnScreenExternalYt" type="button" title="Mở trên YouTube trong tab mới">
-                              <span style="font-size: 0.82rem;">↗️ YouTube</span>
+                            <button class="yt-btn" id="btnScreenExternalYt" type="button" title="Mở cửa sổ rạp iframe trực tiếp trong web (Không mở tab mới)">
+                              <span style="font-size: 0.82rem;">🗗 Cửa sổ rạp</span>
                             </button>
                             <button class="yt-btn" id="btnScreenFullscreen" type="button" title="Toàn màn hình (Phím F)">
                               <span id="screenFsIcon">⛶</span>
@@ -1356,6 +1356,142 @@
     return null;
   }
 
+  // =========================================================================
+  // IN-PAGE CINEMA IFRAME WINDOW (Direct In-Web Theater Window - No Popup)
+  // =========================================================================
+  function openInPageCinemaWindow(videoId, title) {
+    if (!videoId) return null;
+
+    let winEl = document.getElementById('inPageCinemaWindow');
+    if (winEl) {
+      // If window already open, simply update its contents
+      const ifr = document.getElementById('inPageCinemaIframe');
+      const titleEl = document.getElementById('inPageCinemaTitle');
+      if (ifr) ifr.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1`;
+      if (titleEl) titleEl.textContent = title || 'Rạp phim trong web';
+      winEl.style.display = 'flex';
+      return winEl;
+    }
+
+    winEl = document.createElement('div');
+    winEl.className = 'inpage-cinema-window';
+    winEl.id = 'inPageCinemaWindow';
+    winEl.innerHTML = `
+      <div class="inpage-cinema-header" id="inPageCinemaHeader">
+        <div class="inpage-cinema-drag-handle">
+          <span class="inpage-cinema-icon">🎬</span>
+          <div class="inpage-cinema-title-wrap">
+            <span class="inpage-cinema-badge">CỬA SỔ RẠP TRONG WEB</span>
+            <span class="inpage-cinema-title" id="inPageCinemaTitle">${escapeHtml(title || 'Rạp phim trong web')}</span>
+          </div>
+        </div>
+        <div class="inpage-cinema-actions">
+          <button class="inpage-win-btn" id="btnInPageCinemaMountScreen" type="button" title="Chiếu thẳng lên màn hình lớn rạp 3D">
+            <span>🖥️ Chiếu màn chính</span>
+          </button>
+          <button class="inpage-win-btn" id="btnInPageCinemaToggleSize" type="button" title="Thu nhỏ góc (PiP) / Mở rộng">
+            <span id="inPageCinemaSizeIcon">🗗</span>
+          </button>
+          <button class="inpage-win-btn close" id="btnInPageCinemaClose" type="button" title="Đóng cửa sổ">
+            <span>✕</span>
+          </button>
+        </div>
+      </div>
+      <div class="inpage-cinema-body">
+        <iframe
+          id="inPageCinemaIframe"
+          src="https://www.youtube.com/embed/${videoId}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen
+          referrerpolicy="strict-origin-when-cross-origin"
+        ></iframe>
+      </div>
+      <div class="inpage-cinema-footer">
+        <span class="inpage-cinema-hint">💡 Kéo thanh tiêu đề để di chuyển • Bạn vẫn có thể xem rạp 3D, chat và tương tác bình thường</span>
+      </div>
+    `;
+
+    document.body.appendChild(winEl);
+
+    // Draggable header
+    const headerEl = winEl.querySelector('#inPageCinemaHeader');
+    if (headerEl) {
+      makeInPageWindowDraggable(winEl, headerEl);
+    }
+
+    // Mount to main screen
+    document.getElementById('btnInPageCinemaMountScreen')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      createFallbackIframe(videoId);
+      closeInPageCinemaWindow();
+      showToast('🖥️ Đã chuyển phát Iframe trực tiếp lên màn hình rạp 3D chính!');
+    });
+
+    // Toggle PiP / Normal Size
+    document.getElementById('btnInPageCinemaToggleSize')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      winEl.classList.toggle('is-pip');
+      const icon = document.getElementById('inPageCinemaSizeIcon');
+      if (icon) {
+        icon.textContent = winEl.classList.contains('is-pip') ? '🗖' : '🗗';
+      }
+    });
+
+    // Close button
+    document.getElementById('btnInPageCinemaClose')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeInPageCinemaWindow();
+      showToast('Đã đóng cửa sổ rạp trong web');
+    });
+
+    return winEl;
+  }
+
+  function closeInPageCinemaWindow() {
+    const win = document.getElementById('inPageCinemaWindow');
+    if (win) win.remove();
+  }
+
+  function makeInPageWindowDraggable(winEl, handleEl) {
+    let isDragging = false;
+    let startX = 0, startY = 0, initialLeft = 0, initialTop = 0;
+
+    handleEl.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('button')) return;
+      isDragging = true;
+      handleEl.setPointerCapture(e.pointerId);
+      const rect = winEl.getBoundingClientRect();
+      startX = e.clientX;
+      startY = e.clientY;
+      initialLeft = rect.left;
+      initialTop = rect.top;
+      winEl.style.transform = 'none';
+      winEl.style.left = `${initialLeft}px`;
+      winEl.style.top = `${initialTop}px`;
+      winEl.style.bottom = 'auto';
+      winEl.style.right = 'auto';
+    });
+
+    handleEl.addEventListener('pointermove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      const newLeft = Math.max(10, Math.min(window.innerWidth - winEl.offsetWidth - 10, initialLeft + dx));
+      const newTop = Math.max(10, Math.min(window.innerHeight - winEl.offsetHeight - 10, initialTop + dy));
+      winEl.style.left = `${newLeft}px`;
+      winEl.style.top = `${newTop}px`;
+    });
+
+    const stopDrag = (e) => {
+      if (isDragging) {
+        isDragging = false;
+        try { handleEl.releasePointerCapture(e.pointerId); } catch (_) {}
+      }
+    };
+    handleEl.addEventListener('pointerup', stopDrag);
+    handleEl.addEventListener('pointercancel', stopDrag);
+  }
+
   function showVideoRescueCard(currentVid, errCode) {
     hideVideoRescueCard();
     const overlay = document.getElementById('screenInteractiveOverlay');
@@ -1369,17 +1505,20 @@
         <div class="vrc-icon">🛡️</div>
         <div class="vrc-title">Bản quyền YouTube giới hạn phát nhúng</div>
         <div class="vrc-desc">
-          Bài hát <strong>${escapeHtml(currentVid.title)}</strong> được chủ sở hữu bảo vệ bản quyền nghiêm ngặt và yêu cầu phát trên YouTube (Mã lỗi ${errCode || '150/153'}).
+          Bài hát <strong>${escapeHtml(currentVid.title)}</strong> bị YouTube hạn chế phát API mặc định (Mã lỗi ${errCode || '150/153'}).
         </div>
         <div class="vrc-actions">
-          <button class="vrc-btn primary" id="btnRescuePopout" type="button">
-            🚀 Mở Cửa Sổ Rạp Đồng Bộ (Pop-out Sync)
+          <button class="vrc-btn primary" id="btnRescueInPageWindow" type="button">
+            🎬 Mở Cửa Sổ Rạp Iframe Trong Web
+          </button>
+          <button class="vrc-btn secondary" id="btnRescueMountScreen" type="button">
+            🖥️ Chiếu Iframe Trực Tiếp Lên Màn Rạp 3D
           </button>
           <button class="vrc-btn secondary" id="btnRescueTryAlt" type="button">
             🔄 Tìm Bản Audio Khác Cùng Bài Hát
           </button>
           <button class="vrc-btn text-btn" id="btnRescueSkip" type="button">
-            ⏭️ Chuyển sang bài tiếp theo trong hàng đợi
+            ⏭️ Bỏ qua và chuyển sang bài tiếp theo
           </button>
         </div>
       </div>
@@ -1387,11 +1526,18 @@
 
     overlay.appendChild(rescueDiv);
 
-    document.getElementById('btnRescuePopout')?.addEventListener('click', (e) => {
+    document.getElementById('btnRescueInPageWindow')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      const popoutUrl = `https://www.youtube.com/watch?v=${currentVid.videoId}`;
-      window.open(popoutUrl, 'HanzuCinemaPopout', 'width=860,height=520,menubar=no,toolbar=no');
-      showToast('🎬 Đã mở cửa sổ rạp mini đồng bộ! Bạn vẫn có thể chat và tương tác rạp bình thường.');
+      hideVideoRescueCard();
+      openInPageCinemaWindow(currentVid.videoId, currentVid.title);
+      showToast('🎬 Đã mở cửa sổ rạp iframe trực tiếp trong web! Không mở thêm tab mới.');
+    });
+
+    document.getElementById('btnRescueMountScreen')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      hideVideoRescueCard();
+      createFallbackIframe(currentVid.videoId);
+      showToast('🖥️ Đã chiếu Iframe trực tiếp lên màn hình lớn của rạp 3D!');
     });
 
     document.getElementById('btnRescueTryAlt')?.addEventListener('click', async (e) => {
@@ -1402,7 +1548,7 @@
         hideVideoRescueCard();
         loadAndPlayVideo({ videoId: alt.videoId, title: currentVid.title, channel: alt.channel, startedBy: currentVid.startedBy }, true);
       } else {
-        showToast('⚠️ Chưa tìm thấy bản thay thế phù hợp, hãy dùng nút Mở Cửa Sổ Đồng Bộ.');
+        showToast('⚠️ Hãy dùng nút "Mở Cửa Sổ Rạp Iframe Trong Web" để xem ngay!');
       }
     });
 
@@ -1468,6 +1614,14 @@
     }
 
     updateAmbilightColors(state.currentVideo.ambilight);
+
+    // Keep in-page cinema iframe synced if currently open
+    const inPageIframe = document.getElementById('inPageCinemaIframe');
+    const inPageTitle = document.getElementById('inPageCinemaTitle');
+    if (inPageIframe && state.currentVideo && state.currentVideo.videoId) {
+      inPageIframe.src = `https://www.youtube.com/embed/${state.currentVideo.videoId}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1`;
+      if (inPageTitle) inPageTitle.textContent = state.currentVideo.title || 'Đang chiếu';
+    }
 
     if (ytReady && ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
       try {
@@ -2816,7 +2970,8 @@
     document.getElementById('btnScreenExternalYt')?.addEventListener('click', (e) => {
       e.stopPropagation();
       if (state.currentVideo && state.currentVideo.videoId) {
-        window.open('https://www.youtube.com/watch?v=' + state.currentVideo.videoId, '_blank');
+        openInPageCinemaWindow(state.currentVideo.videoId, state.currentVideo.title);
+        showToast('🎬 Đã mở cửa sổ rạp iframe trực tiếp trong web! (Không mở web mới)');
       }
     });
 

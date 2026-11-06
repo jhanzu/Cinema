@@ -2846,3 +2846,170 @@ body.is-dragging-camera iframe,
 .vrc-btn.text-btn:hover {
   color: #CBD5E1;
 }
+
+/* ==========================================================================
+   In-Page Cinema Iframe Window (Direct In-Web Theater Player - No Popup)
+   ========================================================================== */
+.inpage-cinema-window {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: min(640px, 94vw);
+  background: linear-gradient(160deg, rgba(22, 20, 48, 0.96), rgba(12, 14, 34, 0.98));
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85), 0 0 35px rgba(168, 85, 247, 0.3);
+  border-radius: 16px;
+  overflow: hidden;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  animation: winScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(20px);
+  transition: width 0.25s ease, box-shadow 0.25s ease;
+}
+
+@keyframes winScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.inpage-cinema-window.is-pip {
+  width: min(380px, 88vw);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.9), 0 0 20px rgba(139, 92, 246, 0.25);
+}
+
+.inpage-cinema-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: grab;
+  user-select: none;
+  gap: 12px;
+}
+
+.inpage-cinema-header:active {
+  cursor: grabbing;
+}
+
+.inpage-cinema-drag-handle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.inpage-cinema-icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.inpage-cinema-title-wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.inpage-cinema-badge {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #C084FC;
+}
+
+.inpage-cinema-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #F8FAFC;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inpage-cinema-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.inpage-win-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #E2E8F0;
+  border-radius: 8px;
+  padding: 5px 9px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.inpage-win-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #FFF;
+}
+
+.inpage-win-btn.close {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #FCA5A5;
+  padding: 5px 8px;
+}
+
+.inpage-win-btn.close:hover {
+  background: rgba(239, 68, 68, 0.35);
+  color: #FFF;
+}
+
+.inpage-cinema-body {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  position: relative;
+}
+
+.inpage-cinema-body iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.inpage-cinema-footer {
+  padding: 7px 14px;
+  background: rgba(0, 0, 0, 0.4);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.inpage-cinema-hint {
+  font-size: 0.7rem;
+  color: #94A3B8;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 640px) {
+  .inpage-cinema-window {
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 16px !important;
+    width: auto !important;
+  }
+}
