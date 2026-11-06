@@ -661,48 +661,27 @@
         seatNode.innerHTML = `
           <div class="seat-avatar-slot" id="avatar-slot-${seatCode}"></div>
           <div class="chair-3d-model">
-            <!-- 3D Volumetric Backrest Box -->
+            <!-- 3D Ergonomic Backrest -->
             <div class="chair-back-box">
-              <div class="cb-face cb-front">
-                <div class="cb-stitch left"></div>
-                <div class="cb-stitch right"></div>
-              </div>
+              <div class="cb-face cb-front"></div>
               <div class="cb-face cb-back">
                 <span class="seat-code-label">${seatCode}</span>
               </div>
               <div class="cb-face cb-top"></div>
-              <div class="cb-face cb-side left"></div>
-              <div class="cb-face cb-side right"></div>
             </div>
 
-            <!-- 3D Volumetric Seat Cushion Box -->
+            <!-- 3D Plush Seat Cushion -->
             <div class="chair-cushion-box">
-              <div class="cc-face cc-top">
-                <div class="cc-seam"></div>
-              </div>
+              <div class="cc-face cc-top"></div>
               <div class="cc-face cc-front"></div>
-              <div class="cc-face cc-bottom"></div>
-              <div class="cc-face cc-side left"></div>
-              <div class="cc-face cc-side right"></div>
             </div>
 
-            <!-- 3D Volumetric Armrests with 3D Cup Holders -->
-            <div class="chair-armrest-box left">
-              <div class="ca-face ca-top"><div class="cup-holder-3d"></div></div>
-              <div class="ca-face ca-front"></div>
-              <div class="ca-face ca-side outer"></div>
-            </div>
-            <div class="chair-armrest-box right">
-              <div class="ca-face ca-top"><div class="cup-holder-3d"></div></div>
-              <div class="ca-face ca-front"></div>
-              <div class="ca-face ca-side outer"></div>
-            </div>
+            <!-- 3D Sleek Armrests with Built-in Cup Holders -->
+            <div class="chair-armrest left"><div class="cup-holder-3d"></div></div>
+            <div class="chair-armrest right"><div class="cup-holder-3d"></div></div>
 
-            <!-- 3D Pedestal Base & Floor Plate -->
-            <div class="chair-pedestal-box">
-              <div class="cp-stem"></div>
-              <div class="cp-foot"></div>
-            </div>
+            <!-- Pedestal Floor Mount Base -->
+            <div class="chair-pedestal"></div>
           </div>
         `;
 

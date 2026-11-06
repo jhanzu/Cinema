@@ -396,25 +396,19 @@ body.is-dragging-camera iframe,
   pointer-events: none !important;
 }
 
-/* Dynamic Ambilight Backdrop with Hardware-Accelerated Scale & Opacity */
+/* Dynamic Ambilight Backdrop with Hardware-Accelerated Scale & Opacity (60 FPS Native Gradients) */
 .ambilight-layer {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 1;
   background:
-    radial-gradient(ellipse 68% 44% at 50% 18%, var(--ambilight-1), transparent 72%),
+    radial-gradient(ellipse 65% 45% at 50% 18%, var(--ambilight-1), transparent 70%),
     radial-gradient(ellipse 55% 40% at 32% 26%, var(--ambilight-2), transparent 75%);
   opacity: calc(1 - var(--cinema-dim));
-  filter: blur(36px);
   transform: translate3d(0, 0, 0);
   will-change: opacity;
-  animation: ambilightBreathe 7s ease-in-out infinite alternate;
-}
-
-@keyframes ambilightBreathe {
-  0% { opacity: calc((1 - var(--cinema-dim)) * 0.84); }
-  100% { opacity: calc(1 - var(--cinema-dim)); }
+  contain: strict;
 }
 
 .cinema-darkness-overlay {
@@ -533,10 +527,10 @@ body.is-dragging-camera iframe,
   border-radius: 14px;
   border: 4px solid #1e1b38;
   box-shadow:
-    0 0 100px var(--ambilight-2),
-    0 0 50px var(--ambilight-1),
-    0 15px 120px rgba(0, 0, 0, 0.95),
-    inset 0 0 24px rgba(168, 85, 247, 0.15);
+    0 0 50px var(--ambilight-2),
+    0 0 25px var(--ambilight-1),
+    0 12px 60px rgba(0, 0, 0, 0.9);
+  contain: layout;
   overflow: hidden;
   position: relative;
 }
@@ -976,6 +970,7 @@ body.is-dragging-camera iframe,
   transform-style: preserve-3d;
   will-change: transform;
   transform: translate3d(0, 0, 0);
+  contain: layout;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
@@ -986,9 +981,10 @@ body.is-dragging-camera iframe,
   height: 56px;
   transform-style: preserve-3d;
   cursor: pointer;
-  contain: layout style;
+  contain: layout style paint;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+  will-change: transform;
 }
 
 .seat-3d-node:hover {
@@ -1051,11 +1047,14 @@ body.is-dragging-camera iframe,
   padding-top: 5px;
 }
 
-/* Front plush cushion facing the cinema screen */
+/* Front plush cushion facing the cinema screen with built-in realistic stitch lines */
 .cb-face.cb-front {
   inset: 0;
   transform: rotateY(180deg) translateZ(5px);
-  background: linear-gradient(180deg, #303430 0%, #202220 60%, #151615 100%);
+  background:
+    linear-gradient(90deg, transparent 28%, rgba(255,255,255,0.08) 29%, rgba(0,0,0,0.3) 31%, transparent 32%),
+    linear-gradient(90deg, transparent 68%, rgba(255,255,255,0.08) 69%, rgba(0,0,0,0.3) 71%, transparent 72%),
+    linear-gradient(180deg, #303430 0%, #202220 60%, #151615 100%);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 9px 9px 3px 3px;
   overflow: hidden;
@@ -1121,14 +1120,16 @@ body.is-dragging-camera iframe,
   box-sizing: border-box;
 }
 
-/* Top seating surface */
+/* Top seating surface with built-in realistic seam line */
 .cc-face.cc-top {
   top: -13px;
   left: 0;
   width: 42px;
   height: 26px;
   transform: translateY(-4px) rotateX(90deg);
-  background: linear-gradient(180deg, #272a27 0%, #1a1b1a 100%);
+  background:
+    linear-gradient(180deg, transparent 48%, rgba(255, 255, 255, 0.08) 50%, rgba(0, 0, 0, 0.5) 52%, transparent 54%),
+    linear-gradient(180deg, #272a27 0%, #1a1b1a 100%);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 5px;
   box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.6);
@@ -1189,6 +1190,38 @@ body.is-dragging-camera iframe,
 }
 
 /* 3. Volumetric 3D Armrests with 3D Cup Holders */
+.chair-armrest {
+  position: absolute;
+  bottom: 8px;
+  width: 6px;
+  height: 24px;
+  transform-style: preserve-3d;
+  background: linear-gradient(180deg, #323632 0%, #1c1e1c 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 3px;
+  z-index: 3;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 2px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+.chair-armrest.left { left: 0px; }
+.chair-armrest.right { right: 0px; }
+
+.chair-pedestal {
+  position: absolute;
+  bottom: -13px;
+  left: 21px;
+  width: 12px;
+  height: 15px;
+  background: linear-gradient(180deg, #282b28 0%, #111211 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.9);
+  z-index: 0;
+}
+
 .chair-armrest-box {
   position: absolute;
   bottom: 8px;
@@ -1345,10 +1378,9 @@ body.is-dragging-camera iframe,
   font-size: 0.66rem;
   font-weight: 700;
   white-space: nowrap;
-  background: rgba(15, 18, 15, 0.92);
-  backdrop-filter: blur(8px);
+  background: rgba(14, 16, 32, 0.96);
   border: 1px solid var(--char-color);
-  box-shadow: 0 0 14px var(--char-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.8), 0 0 10px var(--char-color);
   color: #fff;
   z-index: 25;
   letter-spacing: 0.02em;
@@ -1388,6 +1420,9 @@ body.is-dragging-camera iframe,
   justify-content: center;
   position: relative;
   transform: translateZ(14px);
+}
+
+.block-mannequin.is-me .block-head {
   will-change: transform;
   animation: mannequinIdle 4s ease-in-out infinite alternate;
 }
@@ -3012,4 +3047,33 @@ body.is-dragging-camera iframe,
     bottom: 16px !important;
     width: auto !important;
   }
+}
+
+/* ==========================================================================
+   60 FPS Graphics & Compositor Acceleration
+   ========================================================================== */
+body.is-dragging-camera,
+body.is-dragging-camera * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+body.is-dragging-camera .seat-3d-node,
+body.is-dragging-camera .chair-3d-model,
+body.is-dragging-camera .mannequin-nametag,
+body.is-dragging-camera .seat-speech-bubble {
+  pointer-events: none !important;
+  transition: none !important;
+}
+
+/* Force hardware rasterization on key 3D containers */
+.scene-3d-wrapper,
+.theater-world,
+.seats-auditorium-3d,
+.stage-screen,
+.screen-frame {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-transform-style: preserve-3d;
+  transform-style: preserve-3d;
 }
