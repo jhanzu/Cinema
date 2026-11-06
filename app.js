@@ -640,6 +640,22 @@
           </div>
         </div>
 
+        <!-- Unavailable Video Warning Pop-up Modal -->
+        <div class="modal-backdrop" id="unavailableVideoModal">
+          <div class="modal-card unavailable-modal-card">
+            <div class="uv-icon">🚫</div>
+            <div class="modal-title uv-title">Video Không Thể Xem (Unavailable)</div>
+            <div class="uv-body" id="uvModalMessage">
+              Link video YouTube này hiện không khả dụng để trình chiếu. Bạn không được phép xem video này.
+            </div>
+            <div class="uv-actions">
+              <button type="button" class="btn-submit uv-btn-confirm" id="btnConfirmUnavailableVideo">
+                ✅ Đồng Ý
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- Toast Notifications -->
         <div class="toast-container" id="toastContainer"></div>
       </div>
@@ -1225,18 +1241,20 @@
             }
           },
           onStateChange: (event) => {
-            if (event.data === window.YT.PlayerState.ENDED) {
-              handleVideoEnd();
-            } else if (event.data === window.YT.PlayerState.PLAYING) {
+            if (event.data === window.YT.PlayerState.PLAYING) {
+              clearTimeout(videoLoadWatchdogTimer);
               state.isPlaying = true;
               hideVideoRescueCard();
               updatePlayPauseButton();
+            } else if (event.data === window.YT.PlayerState.ENDED) {
+              handleVideoEnd();
             } else if (event.data === window.YT.PlayerState.PAUSED) {
               state.isPlaying = false;
               updatePlayPauseButton();
             }
           },
           onError: (event) => {
+            clearTimeout(videoLoadWatchdogTimer);
             const errCode = event ? event.data : 150;
             handleVideoPlayError(errCode);
           }
@@ -1264,38 +1282,40 @@
   }
 
   // =========================================================================
-  // SMART EMBED RECOVERY & ALTERNATIVE RESOLVER (Plays ANY Song)
+  // UNAVAILABLE VIDEO HANDLER & WARNING POPUP (Strict Detection & Alert)
   // =========================================================================
-  let isRecoveringVideo = false;
+  let isShowingUnavailableModal = false;
   const failedVideoIds = new Set();
+  let videoLoadWatchdogTimer = null;
 
-  async function handleVideoPlayError(errCode) {
-    if (isRecoveringVideo) return;
+  function handleVideoPlayError(errCode) {
+    clearTimeout(videoLoadWatchdogTimer);
+    if (isShowingUnavailableModal) return;
     const currentVid = state.currentVideo;
     if (!currentVid || !currentVid.videoId) return;
 
+    isShowingUnavailableModal = true;
     failedVideoIds.add(currentVid.videoId);
-    isRecoveringVideo = true;
 
-    showToast(`⚠️ Video bị hạn chế nhúng (Mã ${errCode || '150/153'}). Đang tự động tìm bản phát thay thế...`);
-
-    const altVideo = await findPlayableAlternative(currentVid.title, currentVid.videoId);
-
-    if (altVideo && !failedVideoIds.has(altVideo.videoId)) {
-      showToast(`🎉 Đã tìm thấy bản phát không giới hạn của "${currentVid.title}"! Đang chiếu...`);
-      isRecoveringVideo = false;
-      loadAndPlayVideo({
-        videoId: altVideo.videoId,
-        title: currentVid.title,
-        channel: altVideo.channel || currentVid.channel,
-        startedBy: currentVid.startedBy || 'Tự động cứu hộ',
-        ambilight: currentVid.ambilight
-      }, true);
-      return;
+    // Specific explanation per YouTube API error codes
+    let errText = 'Chủ sở hữu video hoặc YouTube không cho phép phát video này trên website bên ngoài (Chặn nhúng bản quyền hoặc giới hạn khu vực).';
+    if (errCode === 100) {
+      errText = 'Video đã bị tác giả xóa, chuyển sang chế độ riêng tư hoặc liên kết không tồn tại trên YouTube.';
+    } else if (errCode === 2) {
+      errText = 'Đường link hoặc ID video YouTube này không đúng định dạng.';
+    } else if (errCode === 5) {
+      errText = 'Không thể phát nội dung này trong trình phát HTML5 của trình duyệt.';
     }
 
-    isRecoveringVideo = false;
-    showVideoRescueCard(currentVid, errCode);
+    showUnavailableVideoPopup(
+      currentVid.title || `Video #${currentVid.videoId}`,
+      errText,
+      () => {
+        isShowingUnavailableModal = false;
+        playNextFromQueue('Bỏ qua video không thể xem');
+        showToast('⏭️ Đã chuyển sang bài hát tiếp theo trong hàng đợi.');
+      }
+    );
   }
 
   async function findPlayableAlternative(title, failedId) {
@@ -1493,6 +1513,47 @@
     };
     handleEl.addEventListener('pointerup', stopDrag);
     handleEl.addEventListener('pointercancel', stopDrag);
+  }
+
+  // =========================================================================
+  // UNAVAILABLE VIDEO WARNING POPUP NOTIFICATION (Warning & Confirm)
+  // =========================================================================
+  // UNAVAILABLE VIDEO WARNING POPUP NOTIFICATION (Warning & Confirm)
+  // =========================================================================
+  let unavailableConfirmCallback = null;
+
+  function showUnavailableVideoPopup(videoTitle, reasonMessage, onConfirm) {
+    const modal = document.getElementById('unavailableVideoModal');
+    const msgEl = document.getElementById('uvModalMessage');
+    if (!modal) return;
+
+    unavailableConfirmCallback = onConfirm || null;
+    isShowingUnavailableModal = true;
+
+    if (msgEl) {
+      const cleanTitle = videoTitle ? `"${escapeHtml(videoTitle)}"` : 'này';
+      msgEl.innerHTML = `
+        Video <strong>${cleanTitle}</strong> hiện <strong>không thể xem được</strong> (Unavailable).<br>
+        ${escapeHtml(reasonMessage || 'Do video đã bị xóa, bị giới hạn bản quyền hoặc đặt ở chế độ riêng tư trên YouTube.')}<br><br>
+        <span style="color:#FCA5A5;font-weight:700;">⚠️ Video này không được phép xem trong rạp. Vui lòng bấm Đồng ý để tiếp tục.</span>
+      `;
+    }
+
+    modal.classList.add('open');
+    if (sfx && typeof sfx.playSeatSwitch === 'function') {
+      sfx.playSeatSwitch();
+    }
+  }
+
+  function hideUnavailableVideoPopup() {
+    const modal = document.getElementById('unavailableVideoModal');
+    if (modal) modal.classList.remove('open');
+    isShowingUnavailableModal = false;
+    if (typeof unavailableConfirmCallback === 'function') {
+      const cb = unavailableConfirmCallback;
+      unavailableConfirmCallback = null;
+      cb();
+    }
   }
 
   function showVideoRescueCard(currentVid, errCode) {
@@ -1782,6 +1843,20 @@
       createFallbackIframe(state.currentVideo.videoId);
     }
 
+    // Safety watchdog: If video is blocked or unavailable and player stays unstarted, trigger unavailable warning
+    clearTimeout(videoLoadWatchdogTimer);
+    videoLoadWatchdogTimer = setTimeout(() => {
+      if (!isShowingUnavailableModal && ytReady && ytPlayer) {
+        try {
+          const pState = typeof ytPlayer.getPlayerState === 'function' ? ytPlayer.getPlayerState() : -1;
+          const curTime = typeof ytPlayer.getCurrentTime === 'function' ? ytPlayer.getCurrentTime() : 0;
+          if ((pState === -1 || pState === 3) && curTime === 0 && !state.isPlaying) {
+            handleVideoPlayError(150);
+          }
+        } catch (_) {}
+      }
+    }, 6000);
+
     appendSystemChat(`🎬 Đang chiếu: "${state.currentVideo.title}" (Đề xuất bởi ${state.currentVideo.startedBy})`);
 
     if (broadcast) {
@@ -1846,15 +1921,20 @@
   }
 
   async function fetchYouTubeMetadata(videoId) {
+    let isUnavailable = false;
+
     // 1. Try official YouTube oEmbed API first (fastest, most reliable)
     try {
       const resp = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
-      if (resp.ok) {
+      if (resp.status === 404 || resp.status === 401 || resp.status === 400) {
+        isUnavailable = true;
+      } else if (resp.ok) {
         const data = await resp.json();
         if (data && data.title) {
           return {
             title: data.title,
-            channel: data.author_name || 'YouTube Creator'
+            channel: data.author_name || 'YouTube Creator',
+            available: true
           };
         }
       }
@@ -1868,15 +1948,28 @@
         if (data2 && data2.title) {
           return {
             title: data2.title,
-            channel: data2.author_name || 'YouTube Creator'
+            channel: data2.author_name || 'YouTube Creator',
+            available: true
           };
+        }
+        if (data2 && data2.error) {
+          isUnavailable = true;
         }
       }
     } catch (err2) {}
 
+    if (isUnavailable) {
+      return {
+        title: null,
+        channel: null,
+        available: false
+      };
+    }
+
     return {
       title: `Video YouTube #${videoId}`,
-      channel: 'Khán giả đề xuất'
+      channel: 'Khán giả đề xuất',
+      available: true
     };
   }
 
@@ -1965,10 +2058,21 @@
     let title = customTitle;
     let channel = customChannel;
     if (!title) {
-      showToast('🔍 Đang lấy thông tin video từ YouTube...');
+      showToast('🔍 Đang kiểm tra link video từ YouTube...');
       const meta = await fetchYouTubeMetadata(videoId);
-      title = meta.title;
-      channel = meta.channel;
+      if (meta && meta.available === false) {
+        showUnavailableVideoPopup(
+          `ID: ${videoId}`,
+          'Link video YouTube này không tồn tại, đã bị tác giả xóa hoặc đặt ở chế độ riêng tư (Unavailable). Bạn không được phép xem video này.',
+          () => {
+            const input = document.getElementById('inputYoutubeUrl');
+            if (input) { input.value = ''; input.focus(); }
+          }
+        );
+        return;
+      }
+      title = meta.title || `Video #${videoId}`;
+      channel = meta.channel || 'YouTube Creator';
     }
 
     const newItem = {
@@ -3547,6 +3651,28 @@
       showToast('💾 Đã lưu cấu hình máy chủ phòng chiếu!');
     });
 
+    // Unavailable Video Warning Modal Events
+    document.getElementById('btnConfirmUnavailableVideo')?.addEventListener('click', () => {
+      hideUnavailableVideoPopup();
+    });
+    document.getElementById('unavailableVideoModal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'unavailableVideoModal') {
+        hideUnavailableVideoPopup();
+      }
+    });
+
+    // Global PostMessage listener for YouTube Player Iframe errors
+    window.addEventListener('message', (event) => {
+      try {
+        if (!event.data) return;
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (data && (data.event === 'onError' || data.info?.errorCode)) {
+          const code = data.info?.errorCode || data.info || 150;
+          handleVideoPlayError(code);
+        }
+      } catch (_) {}
+    });
+
     // Auto-open Onboarding Modal on first visit if not yet configured
     if (!state.me.hasConfigured) {
       setTimeout(() => {
@@ -3556,6 +3682,15 @@
 
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
+      const uvModal = document.getElementById('unavailableVideoModal');
+      if (uvModal && uvModal.classList.contains('open')) {
+        if (e.key === 'Escape' || e.key === 'Enter') {
+          e.preventDefault();
+          hideUnavailableVideoPopup();
+          return;
+        }
+      }
+
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
         if (e.key === 'Escape') {
           e.target.blur();
