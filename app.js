@@ -336,7 +336,7 @@
 
                 <!-- Giant Cinema Screen -->
                 <div class="screen-pedestal">
-                  <div class="screen-frame">
+                  <div class="screen-frame" id="cinemaScreenFrame">
                     <div class="screen-curtain-top">
                       <span>HANZU CINEMA IMAX 3D</span>
                       <span id="screenSeatStatus">GHẾ CỦA BẠN: ${state.me.seat}</span>
@@ -357,12 +357,15 @@
                       <div class="screen-top-quickbar">
                         <span class="stq-title" id="screenTopTitle">${escapeHtml(state.currentVideo.title)}</span>
                         <div class="stq-actions">
+                          <button class="stq-btn" id="btnToggleNativeYt" type="button" title="Chuyển đổi giữa Giao diện Rạp và Menu cài đặt gốc YouTube">⚙️ YouTube Gốc</button>
                           <button class="stq-btn" id="btnScreenFocusMode" type="button" title="Chế độ Rạp IMAX cận cảnh (Phím tắt: T)">⛶ Rạp IMAX</button>
                         </div>
                       </div>
 
                       <!-- Center Gesture & Click Area -->
-                      <div class="screen-click-area" id="screenClickArea"></div>
+                      <div class="screen-click-area" id="screenClickArea">
+                        <div class="screen-center-play-btn" id="screenCenterPlayBtn" title="Phát video">▶️</div>
+                      </div>
 
                       <!-- Bottom YouTube Control HUD -->
                       <div class="screen-yt-hud" id="screenYtHud">
@@ -2606,6 +2609,31 @@
     document.getElementById('btnScreenFullscreen')?.addEventListener('click', (e) => {
       e.stopPropagation();
       toggleFullscreen();
+    });
+
+    // Center Play Button (appears when paused)
+    document.getElementById('screenCenterPlayBtn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      togglePlayPause();
+      showRippleBadge('▶️', 'Đang phát', 'center');
+    });
+
+    // Toggle Native YouTube Controls Passthrough Mode
+    document.getElementById('btnToggleNativeYt')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const frame = document.getElementById('cinemaScreenFrame');
+      if (!frame) return;
+      const isNative = frame.classList.toggle('native-yt-active');
+      const btn = e.currentTarget;
+      if (isNative) {
+        btn.textContent = '🎬 Giao diện Rạp';
+        btn.title = 'Trở về giao diện điều khiển Rạp Hanzu Cinema';
+        showToast('⚙️ Đã bật tương tác trực tiếp YouTube gốc (Bấm gear để chỉnh 1080p, phụ đề, âm thanh)');
+      } else {
+        btn.textContent = '⚙️ YouTube Gốc';
+        btn.title = 'Chuyển sang tương tác menu cài đặt gốc YouTube';
+        showToast('🎬 Đã quay lại giao diện điều khiển Rạp Cinema');
+      }
     });
 
     document.getElementById('btnScreenFocusMode')?.addEventListener('click', (e) => {
