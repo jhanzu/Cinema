@@ -239,6 +239,8 @@
 
     // Auto Skip Ads State (60 FPS Safe, Fast-Forward & Instant Bypass)
     autoSkipAds: localStorage.getItem('hanzu_cinema_auto_skip_ads') !== 'false',
+    // Personal Subtitles / Closed Captions State (Local client-only, does not affect others)
+    subtitlesEnabled: localStorage.getItem('hanzu_subtitles_enabled') === '1',
     isAdPlaying: false,
     skippedAdsCount: 0,
     lastAdBypassTime: 0,
@@ -468,6 +470,9 @@
                           </div>
 
                           <div class="yt-hud-right">
+                            <button class="yt-btn yt-cc-btn ${state.subtitlesEnabled ? 'active' : ''}" id="btnScreenToggleSubtitles" type="button" title="Bật / Tắt phụ đề cá nhân (Phím C)">
+                              <span id="screenSubtitlesLabel">${state.subtitlesEnabled ? '💬 Phụ đề: BẬT' : '💬 Phụ đề: TẮT'}</span>
+                            </button>
                             <button class="yt-btn yt-adskip-btn ${state.autoSkipAds ? 'active' : ''}" id="btnToggleAutoSkipAds" type="button" title="Tự động bỏ qua quảng cáo (Click để bỏ qua ngay hoặc Bật/Tắt)">
                               <span id="adSkipBtnIcon">${state.autoSkipAds ? '🛡️ Bỏ qua QC: BẬT' : '🛡️ Bỏ qua QC: TẮT'}</span>
                             </button>
@@ -509,6 +514,9 @@
                 </button>
                 <button class="ctrl-btn" id="btnResetCamera" title="Đặt lại góc nhìn chuẩn">
                   🎯 Căn giữa
+                </button>
+              <button class="ctrl-btn cc-toggle ${state.subtitlesEnabled ? 'active' : ''}" id="btnDockToggleSubtitles" title="Bật / Tắt phụ đề cá nhân (Phím C)">
+                  <span id="dockSubtitlesLabel">${state.subtitlesEnabled ? '💬 Phụ đề: BẬT' : '💬 Phụ đề'}</span>
                 </button>
               </div>
 
@@ -1366,7 +1374,9 @@
           fs: 1,
           iv_load_policy: 3,
           origin: originParam
-        },
+        ,
+          cc_load_policy: state.subtitlesEnabled ? 1 : 0,
+          cc_lang_pref: 'vi'},
         events: {
           onReady: (event) => {
             ytReady = true;
@@ -1407,6 +1417,9 @@
               hideVideoRescueCard();
               updatePlayPauseButton();
               updateAmbilightColors(state.currentVideo.ambilight);
+            if (state.subtitlesEnabled) {
+                setTimeout(() => { applySubtitlesStateToPlayer(); }, 350);
+              }
             } else if (event.data === window.YT.PlayerState.ENDED) {
               handleVideoEnd();
             } else if (event.data === window.YT.PlayerState.PAUSED) {
@@ -1432,6 +1445,7 @@
     const mount = document.getElementById('ytPlayerMount');
     if (!mount) return;
     const startParam = startSeconds > 0 ? `&start=${Math.floor(startSeconds)}` : '';
+    const ccParam = state.subtitlesEnabled ? '&cc_load_policy=1&cc_lang_pref=vi' : '&cc_load_policy=0';
     mount.innerHTML = `
       <iframe
         id="youtubePlayerContainer"
@@ -1487,6 +1501,89 @@
         });
       }
     } catch (_) {}
+  }
+
+  // =========================================================================
+  // CLIENT-SIDE CLOSED CAPTIONS / SUBTITLES CONTROLLER (100% PERSONAL PREFERENCE)
+  // =========================================================================
+  function updateSubtitlesUI() {
+    const screenBtn = document.getElementById('btnScreenToggleSubtitles');
+    const screenLabel = document.getElementById('screenSubtitlesLabel');
+    const dockBtn = document.getElementById('btnDockToggleSubtitles');
+    const dockLabel = document.getElementById('dockSubtitlesLabel');
+
+    if (screenBtn) {
+      screenBtn.classList.toggle('active', !!state.subtitlesEnabled);
+    }
+    if (screenLabel) {
+      screenLabel.textContent = state.subtitlesEnabled ? '💬 Phụ đề: BẬT' : '💬 Phụ đề: TẮT';
+    }
+    if (dockBtn) {
+      dockBtn.classList.toggle('active', !!state.subtitlesEnabled);
+    }
+    if (dockLabel) {
+      dockLabel.textContent = state.subtitlesEnabled ? '💬 Phụ đề: BẬT' : '💬 Phụ đề';
+    }
+  }
+
+  function applySubtitlesStateToPlayer() {
+    if (!ytReady || !ytPlayer) return;
+
+    try {
+      if (state.subtitlesEnabled) {
+        if (typeof ytPlayer.loadModule === 'function') {
+          ytPlayer.loadModule('captions');
+        }
+        if (typeof ytPlayer.setOption === 'function') {
+          try {
+            const tracklist = (typeof ytPlayer.getOption === 'function') ? ytPlayer.getOption('captions', 'tracklist') : null;
+            if (Array.isArray(tracklist) && tracklist.length > 0) {
+              const viTrack = tracklist.find((t) => t.languageCode === 'vi');
+              const enTrack = tracklist.find((t) => t.languageCode === 'en');
+              const chosen = viTrack || enTrack || tracklist[0];
+              ytPlayer.setOption('captions', 'track', chosen ? { languageCode: chosen.languageCode } : { languageCode: 'vi' });
+            } else {
+              ytPlayer.setOption('captions', 'track', { languageCode: 'vi' });
+            }
+          } catch (_) {
+            try { ytPlayer.setOption('captions', 'track', { languageCode: 'vi' }); } catch (_) {}
+          }
+        }
+      } else {
+        if (typeof ytPlayer.unloadModule === 'function') {
+          ytPlayer.unloadModule('captions');
+        }
+        if (typeof ytPlayer.setOption === 'function') {
+          try {
+            ytPlayer.setOption('captions', 'track', {});
+          } catch (_) {}
+        }
+      }
+    } catch (err) {
+      console.warn('Subtitles apply error:', err);
+    }
+  }
+
+  function toggleSubtitles(forceState) {
+    if (typeof forceState === 'boolean') {
+      state.subtitlesEnabled = forceState;
+    } else {
+      state.subtitlesEnabled = !state.subtitlesEnabled;
+    }
+
+    try {
+      localStorage.setItem('hanzu_subtitles_enabled', state.subtitlesEnabled ? '1' : '0');
+    } catch (_) {}
+
+    applySubtitlesStateToPlayer();
+    updateSubtitlesUI();
+
+    showToast(
+      state.subtitlesEnabled
+        ? '💬 Đã BẬT phụ đề (Tùy chọn cá nhân của bạn, không ảnh hưởng người khác)'
+        : '💬 Đã TẮT phụ đề (Tùy chọn cá nhân của bạn)',
+      3200
+    );
   }
 
   // =========================================================================
@@ -2322,7 +2419,8 @@
     const inPageTitle = document.getElementById('inPageCinemaTitle');
     if (inPageIframe && state.currentVideo && state.currentVideo.videoId) {
       const startParam = startSeconds > 0 ? `&start=${Math.floor(startSeconds)}` : '';
-      inPageIframe.src = `https://www.youtube.com/embed/${state.currentVideo.videoId}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1${startParam}`;
+      const ccParam = state.subtitlesEnabled ? '&cc_load_policy=1&cc_lang_pref=vi' : '&cc_load_policy=0';
+      inPageIframe.src = `https://www.youtube.com/embed/${state.currentVideo.videoId}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1${ccParam}${startParam}`;
       if (inPageTitle) inPageTitle.textContent = state.currentVideo.title || 'Đang chiếu';
     }
 
@@ -4226,6 +4324,16 @@
       }
     });
 
+    // Personal Subtitles Toggle Buttons
+    document.getElementById('btnScreenToggleSubtitles')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleSubtitles();
+    });
+    document.getElementById('btnDockToggleSubtitles')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleSubtitles();
+    });
+
     document.getElementById('checkModalAutoSkipAds')?.addEventListener('change', (e) => {
       state.autoSkipAds = e.target.checked;
       localStorage.setItem('hanzu_cinema_auto_skip_ads', state.autoSkipAds ? 'true' : 'false');
@@ -4714,6 +4822,9 @@
 
       if (e.key === 'Escape') {
         closeProfile();
+      } else if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault();
+        toggleSubtitles();
       } else if (e.key === ' ' || e.key === 'k' || e.key === 'K') {
         e.preventDefault();
         if (isPlaybackLocked()) {

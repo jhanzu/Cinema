@@ -667,7 +667,7 @@ body.is-dragging-camera iframe,
 .screen-interactive-overlay.is-paused .screen-top-quickbar {
   opacity: 1;
   transform: translateY(0);
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .stq-title {
@@ -675,7 +675,16 @@ body.is-dragging-camera iframe,
   font-size: 0.86rem;
   font-weight: 700;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95);
-  max-width: 68%;
+  max-width: 50%;
+  pointer-events: auto;
+}
+
+.stq-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 98px; /* Offset so YouTube's top-right CC and gear controls are completely uncovered */
+  pointer-events: auto;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -925,12 +934,15 @@ body.is-dragging-camera iframe,
 
 .screen-frame.native-yt-active .screen-top-quickbar {
   opacity: 1 !important;
-  pointer-events: auto !important;
+  pointer-events: none !important;
   transform: translateY(0) !important;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.94) 0%, transparent 100%);
 }
 
-.screen-frame.native-yt-active .screen-top-quickbar .stq-actions,
+.screen-frame.native-yt-active .screen-top-quickbar .stq-actions {
+  pointer-events: auto !important;
+  margin-right: 98px !important;
+}
 .screen-frame.native-yt-active #btnToggleNativeYt {
   pointer-events: auto !important;
 }
@@ -3273,4 +3285,57 @@ body.is-dragging-camera .seat-speech-bubble {
 .vl-btn-confirm:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 26px rgba(245, 158, 11, 0.75) !important;
+}
+
+/* ==========================================================================
+   PERSONAL CLIENT-SIDE CLOSED CAPTIONS / SUBTITLES TOGGLE
+   ========================================================================== */
+.yt-cc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #E2E8F0;
+  border-radius: 6px;
+  padding: 4px 9px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.yt-cc-btn:hover {
+  transform: translateY(-1px);
+  background: rgba(59, 130, 246, 0.28);
+  border-color: rgba(96, 165, 250, 0.5);
+  color: #FFF;
+}
+
+.yt-cc-btn.active {
+  background: rgba(59, 130, 246, 0.24) !important;
+  border-color: rgba(96, 165, 250, 0.65) !important;
+  color: #93C5FD !important;
+  box-shadow: 0 0 14px rgba(59, 130, 246, 0.4) !important;
+}
+
+.ctrl-btn.cc-toggle {
+  background: rgba(59, 130, 246, 0.14);
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  color: #BFDBFE;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ctrl-btn.cc-toggle:hover {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: rgba(96, 165, 250, 0.55);
+  color: #FFF;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.35);
+}
+
+.ctrl-btn.cc-toggle.active {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.38), rgba(59, 130, 246, 0.55)) !important;
+  border-color: #60A5FA !important;
+  color: #EFF6FF !important;
+  box-shadow: 0 0 14px rgba(59, 130, 246, 0.5) !important;
 }
