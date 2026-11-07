@@ -2530,9 +2530,11 @@
 
   function getRequiredSkipVotes() {
     const totalViewers = Object.keys(getOccupantMap()).length || 1;
-    const rawThreshold = Math.floor(totalViewers * 0.3);
-    // 30% người vote: làm tròn xuống (VD: 3.66 = 3; 7.2 = 7). Nếu không đủ 1 (1-3 người) thì chỉ cần 1 vote là tự động skip
-    return Math.max(1, rawThreshold);
+    if (totalViewers <= 1) return 1;
+    // Cần tối thiểu 30% khán giả đồng ý (làm tròn lên Math.ceil để luôn đạt từ 30% trở lên)
+    // Và luôn yêu cầu tối thiểu 2 người khi phòng có từ 2 người trở lên (chống 1 người tự ý skip)
+    const pct30 = Math.ceil(totalViewers * 0.3);
+    return Math.max(2, pct30);
   }
 
   function updateSkipVoteUI() {
@@ -2540,6 +2542,7 @@
     if (!btn) return;
 
     purgeInvalidSkipVotes();
+    const totalViewers = Object.keys(getOccupantMap()).length || 1;
     const required = getRequiredSkipVotes();
     const votesCount = state.skipVotes.size;
     const hasQueue = Array.isArray(state.queue) && state.queue.length > 0;
@@ -2565,7 +2568,7 @@
         btn.innerHTML = `⏭️ Đã vote (<span id="skipVoteCounter">${votesCount}/${required}</span>)`;
       } else {
         btn.classList.remove('voted');
-        btn.title = `Bỏ phiếu chuyển sang video #1 trong hàng đợi (Cần ${required} phiếu - 30% khán giả)`;
+        btn.title = `Bỏ phiếu chuyển sang video #1 trong hàng đợi (Cần ${required}/${totalViewers} phiếu - tối thiểu 30% khán giả)`;
         btn.innerHTML = `⏭️ Qua bài (<span id="skipVoteCounter">${votesCount}/${required}</span>)`;
       }
     }
@@ -2606,13 +2609,11 @@
       votes: Array.from(state.skipVotes)
     });
 
-    // 4. Kiểm tra ngưỡng đủ 30% để tiến hành skip
+    // 4. Kiểm tra ngưỡng đủ để tiến hành skip
     if (state.skipVotes.size >= required) {
       const totalViewers = Object.keys(getOccupantMap()).length || 1;
-      const rawThreshold = Math.floor(totalViewers * 0.3);
-      const reason = rawThreshold < 1
-        ? 'Tự động qua bài (30% khán giả < 1 người)'
-        : `Đã đủ ${state.skipVotes.size}/${required} phiếu (30% khán giả)`;
+      const pct = Math.round((state.skipVotes.size / totalViewers) * 100);
+      const reason = `Đã đủ ${state.skipVotes.size}/${required} phiếu (${pct}% khán giả đồng ý)`;
       playNextFromQueue(reason);
     }
   }

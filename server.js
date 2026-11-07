@@ -140,6 +140,19 @@ function broadcast(payload, excludeWs = null) {
 }
 
 /**
+ * Calculate required skip votes:
+ * - 1 viewer: 1 vote
+ * - >= 2 viewers: at least 30% of room (rounded UP with Math.ceil to always ensure >= 30%)
+ *   and strictly at least 2 votes to prevent any single viewer from skipping alone
+ */
+function getRequiredSkipVotesServer() {
+  const totalViewers = Object.keys(roomState.occupants).length || 1;
+  if (totalViewers <= 1) return 1;
+  const pct30 = Math.ceil(totalViewers * 0.3);
+  return Math.max(2, pct30);
+}
+
+/**
  * Advance queue to next video and broadcast to all users
  */
 function advanceRoomQueue(reasonText) {
@@ -149,7 +162,7 @@ function advanceRoomQueue(reasonText) {
     broadcast({
       type: 'SKIP_VOTE_UPDATE',
       votes: [],
-      required: 1,
+      required: getRequiredSkipVotesServer(),
       isEmpty: true
     });
     return;
@@ -470,6 +483,13 @@ function handleClientMessage(ws, data) {
         ws
       );
 
+      // 3. Broadcast updated skip vote requirement to all clients as headcount changed
+      broadcast({
+        type: 'SKIP_VOTE_UPDATE',
+        votes: Array.from(roomState.skipVotes),
+        required: getRequiredSkipVotesServer()
+      });
+
       // 3. Add system welcome message in chat
       const sysNotice = {
         id: 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
@@ -599,13 +619,11 @@ function handleClientMessage(ws, data) {
 
       roomState.skipVotes.add(ws.userId);
       const totalViewers = Object.keys(roomState.occupants).length || 1;
-      const rawThreshold = Math.floor(totalViewers * 0.3);
-      const required = Math.max(1, rawThreshold);
+      const required = getRequiredSkipVotesServer();
 
       if (roomState.skipVotes.size >= required) {
-        const reason = rawThreshold < 1
-          ? 'Tự động qua bài (30% khán giả < 1 người)'
-          : `Đã đủ ${roomState.skipVotes.size}/${required} phiếu (30% khán giả)`;
+        const pct = Math.round((roomState.skipVotes.size / totalViewers) * 100);
+        const reason = `Đã đủ ${roomState.skipVotes.size}/${required} phiếu (${pct}% khán giả đồng ý)`;
         advanceRoomQueue(reason);
       } else {
         broadcast({
@@ -620,8 +638,7 @@ function handleClientMessage(ws, data) {
     case 'SKIP_VOTE_REVOKE': {
       if (!ws.userId) return;
       roomState.skipVotes.delete(ws.userId);
-      const totalViewers = Object.keys(roomState.occupants).length || 1;
-      const required = Math.max(1, Math.floor(totalViewers * 0.3));
+      const required = getRequiredSkipVotesServer();
       broadcast({
         type: 'SKIP_VOTE_UPDATE',
         votes: Array.from(roomState.skipVotes),
@@ -800,8 +817,7 @@ function handleClientDisconnect(ws) {
     });
 
     // Update skip threshold
-    const totalViewers = Object.keys(roomState.occupants).length || 1;
-    const required = Math.max(1, Math.floor(totalViewers * 0.3));
+    const required = getRequiredSkipVotesServer();
     broadcast({
       type: 'SKIP_VOTE_UPDATE',
       votes: Array.from(roomState.skipVotes),
