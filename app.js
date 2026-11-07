@@ -711,6 +711,22 @@
           </div>
         </div>
 
+        <!-- Video Duration Limit Warning Pop-up Modal (<= 8 Mins) -->
+        <div class="modal-backdrop" id="videoLimitModal">
+          <div class="modal-card unavailable-modal-card video-limit-modal-card">
+            <div class="vl-icon">⏱️</div>
+            <div class="modal-title uv-title vl-title">Video Quá Thời Lượng Cho Phép</div>
+            <div class="uv-body" id="vlModalMessage">
+              Video này vượt quá giới hạn thời lượng 8 phút cho phép của rạp chiếu phim. Vui lòng chọn bài khác!
+            </div>
+            <div class="uv-actions">
+              <button type="button" class="btn-submit uv-btn-confirm vl-btn-confirm" id="btnConfirmVideoLimit">
+                ✅ Đã Hiểu • Chọn Bài Khác
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- Toast Notifications -->
         <div class="toast-container" id="toastContainer"></div>
       </div>
@@ -1380,6 +1396,13 @@
           onStateChange: (event) => {
             if (event.data === window.YT.PlayerState.PLAYING) {
               clearTimeout(videoLoadWatchdogTimer);
+              try {
+                const dur = typeof event.target.getDuration === 'function' ? event.target.getDuration() : 0;
+                if (dur && dur > MAX_VIDEO_DURATION_SECONDS) {
+                  enforceVideoLimit(dur);
+                  return;
+                }
+              } catch (_) {}
               state.isPlaying = true;
               hideVideoRescueCard();
               updatePlayPauseButton();
@@ -1435,6 +1458,13 @@
             onStateChange: (event) => {
               if (event.data === window.YT.PlayerState.PLAYING) {
                 clearTimeout(videoLoadWatchdogTimer);
+                try {
+                  const dur = typeof event.target.getDuration === 'function' ? event.target.getDuration() : 0;
+                  if (dur && dur > MAX_VIDEO_DURATION_SECONDS) {
+                    enforceVideoLimit(dur);
+                    return;
+                  }
+                } catch (_) {}
                 state.isPlaying = true;
                 hideVideoRescueCard();
                 updatePlayPauseButton();
@@ -1836,6 +1866,164 @@
       unavailableConfirmCallback = null;
       cb();
     }
+  }
+
+  // =========================================================================
+  // VIDEO DURATION LIMIT ENFORCER (MAX 8 MINUTES / 480 SECONDS)
+  // =========================================================================
+  const MAX_VIDEO_DURATION_SECONDS = 480; // 8 minutes limit
+
+  function formatDuration(seconds) {
+    if (!seconds || isNaN(seconds) || seconds < 0) return '0:00';
+    const totalSec = Math.round(seconds);
+    const mins = Math.floor(totalSec / 60);
+    const secs = totalSec % 60;
+    if (mins >= 60) {
+      const hrs = Math.floor(mins / 60);
+      const remMins = mins % 60;
+      return `${hrs}:${remMins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  let videoLimitConfirmCallback = null;
+  let isShowingVideoLimitModal = false;
+
+  function showVideoLimitPopup(videoTitle, durationSeconds, onConfirm) {
+    const modal = document.getElementById('videoLimitModal');
+    const msgEl = document.getElementById('vlModalMessage');
+    if (!modal) return;
+
+    videoLimitConfirmCallback = onConfirm || null;
+    isShowingVideoLimitModal = true;
+
+    const cleanTitle = videoTitle ? `"${escapeHtml(videoTitle)}"` : 'Video này';
+    const durationText = durationSeconds ? formatDuration(durationSeconds) : 'hơn 8 phút';
+
+    if (msgEl) {
+      msgEl.innerHTML = `
+        Video <strong>${cleanTitle}</strong> có thời lượng <strong><span style="color:#FBBF24;">${durationText}</span></strong>.<br><br>
+        <div style="background:rgba(245, 158, 11, 0.12);border:1px solid rgba(245, 158, 11, 0.35);border-radius:10px;padding:12px 14px;text-align:left;font-size:0.875rem;line-height:1.5;color:#FDE68A;">
+          ⏱️ <strong>Quy định rạp:</strong> Video trong rạp <strong>chỉ được dưới 8 phút</strong> (tối đa 08:00) để đảm bảo mọi khán giả đều có thể đề xuất bài và giữ không khí sôi động.
+        </div>
+        <br>
+        <span style="color:#E2E8F0;font-weight:600;">👉 Video này không được phép chiếu. Vui lòng chọn một bài hát hoặc video khác ngắn hơn!</span>
+      `;
+    }
+
+    modal.classList.add('open');
+    if (sfx && typeof sfx.playSeatSwitch === 'function') {
+      sfx.playSeatSwitch();
+    }
+  }
+
+  function hideVideoLimitPopup() {
+    const modal = document.getElementById('videoLimitModal');
+    if (modal) modal.classList.remove('open');
+    isShowingVideoLimitModal = false;
+    if (typeof videoLimitConfirmCallback === 'function') {
+      const cb = videoLimitConfirmCallback;
+      videoLimitConfirmCallback = null;
+      cb();
+    }
+  }
+
+  let isEnforcingLimit = false;
+  function enforceVideoLimit(dur) {
+    if (isEnforcingLimit) return;
+    isEnforcingLimit = true;
+    const current = state.currentVideo;
+    const title = current?.title || 'Video này';
+    const videoId = current?.videoId;
+
+    try {
+      if (ytPlayer && typeof ytPlayer.stopVideo === 'function') {
+        ytPlayer.stopVideo();
+      }
+    } catch (_) {}
+    state.isPlaying = false;
+    updatePlayPauseButton();
+
+    if (videoId) {
+      state.queue = (state.queue || []).filter((q) => q.videoId !== videoId);
+      renderQueue();
+      saveLiveQueueToStorage();
+    }
+
+    showVideoLimitPopup(title, Math.round(dur), () => {
+      isEnforcingLimit = false;
+      playNextFromQueue('Đã bỏ qua video vượt quá giới hạn 8 phút');
+    });
+  }
+
+  function probeYouTubeDuration(videoId) {
+    return new Promise((resolve) => {
+      if (!window.YT || typeof window.YT.Player !== 'function') {
+        return resolve(null);
+      }
+      let probeDiv = document.getElementById('ytDurationProbeContainer');
+      if (!probeDiv) {
+        probeDiv = document.createElement('div');
+        probeDiv.id = 'ytDurationProbeContainer';
+        probeDiv.style.cssText = 'position:fixed;width:1px;height:1px;left:-9999px;top:-9999px;opacity:0;pointer-events:none;';
+        document.body.appendChild(probeDiv);
+      }
+      const probeTargetId = 'probe_yt_' + Math.random().toString(36).slice(2, 7);
+      const targetDiv = document.createElement('div');
+      targetDiv.id = probeTargetId;
+      probeDiv.appendChild(targetDiv);
+
+      let settled = false;
+      const cleanup = (player) => {
+        if (settled) return;
+        settled = true;
+        try { if (player && typeof player.destroy === 'function') player.destroy(); } catch (_) {}
+        try { targetDiv.remove(); } catch (_) {}
+      };
+
+      const timer = setTimeout(() => {
+        cleanup(null);
+        resolve(null);
+      }, 3500);
+
+      try {
+        const probePlayer = new window.YT.Player(probeTargetId, {
+          videoId,
+          playerVars: { autoplay: 0, controls: 0, disablekb: 1 },
+          events: {
+            onReady: (e) => {
+              try {
+                const dur = e.target.getDuration();
+                if (dur && dur > 0) {
+                  clearTimeout(timer);
+                  cleanup(e.target);
+                  return resolve(dur);
+                }
+              } catch (_) {}
+            },
+            onStateChange: (e) => {
+              try {
+                const dur = e.target.getDuration();
+                if (dur && dur > 0) {
+                  clearTimeout(timer);
+                  cleanup(e.target);
+                  return resolve(dur);
+                }
+              } catch (_) {}
+            },
+            onError: () => {
+              clearTimeout(timer);
+              cleanup(probePlayer);
+              resolve(null);
+            }
+          }
+        });
+      } catch (_) {
+        clearTimeout(timer);
+        cleanup(null);
+        resolve(null);
+      }
+    });
   }
 
   function showVideoRescueCard(currentVid, errCode) {
@@ -2325,6 +2513,30 @@
   async function fetchYouTubeMetadata(videoId) {
     let isUnavailable = false;
 
+    // 0. Try local server video-info API first (returns exact lengthSeconds, title, isLive & availability)
+    try {
+      const sResp = await fetch(`/api/video-info?id=${encodeURIComponent(videoId)}`, {
+        signal: AbortSignal.timeout(3500)
+      });
+      if (sResp.ok) {
+        const sData = await sResp.json();
+        if (sData) {
+          if (sData.available === false) {
+            return { title: null, channel: null, lengthSeconds: null, available: false };
+          }
+          if (sData.title || sData.lengthSeconds !== null) {
+            return {
+              title: sData.title || null,
+              channel: 'YouTube Creator',
+              lengthSeconds: sData.lengthSeconds !== null ? sData.lengthSeconds : null,
+              isLive: !!sData.isLive,
+              available: true
+            };
+          }
+        }
+      }
+    } catch (_) {}
+
     // 1. Try official YouTube oEmbed API first (fastest, most reliable)
     try {
       const resp = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
@@ -2452,7 +2664,7 @@
     });
   }
 
-  async function addVideoToQueue(videoId, customTitle, customChannel) {
+  async function addVideoToQueue(videoId, customTitle, customChannel, customLength) {
     if (failedVideoIds.has(videoId)) {
       showUnavailableVideoPopup(
         customTitle || `ID: ${videoId}`,
@@ -2472,25 +2684,57 @@
 
     let title = customTitle;
     let channel = customChannel;
-    if (!title) {
-      showToast('🔍 Đang kiểm tra link video từ YouTube...');
-      const meta = await fetchYouTubeMetadata(videoId);
-      if (meta && meta.available === false) {
-        state.queue = (state.queue || []).filter((q) => q.videoId !== videoId);
-        renderQueue();
-        showUnavailableVideoPopup(
-          `ID: ${videoId}`,
-          'Link video YouTube này không tồn tại, đã bị tác giả xóa hoặc đặt ở chế độ riêng tư (Unavailable). Bạn không được phép xem video này.',
-          () => {
-            const input = document.getElementById('inputYoutubeUrl');
-            if (input) { input.value = ''; input.focus(); }
-          }
-        );
-        return;
-      }
-      title = meta.title || `Video #${videoId}`;
-      channel = meta.channel || 'YouTube Creator';
+    let lengthSeconds = (customLength !== undefined && customLength !== null) ? customLength : null;
+
+    showToast('🔍 Đang kiểm tra link & thời lượng video...');
+    const meta = await fetchYouTubeMetadata(videoId);
+    if (meta && meta.available === false) {
+      state.queue = (state.queue || []).filter((q) => q.videoId !== videoId);
+      renderQueue();
+      showUnavailableVideoPopup(
+        customTitle || `ID: ${videoId}`,
+        'Link video YouTube này không tồn tại, đã bị tác giả xóa hoặc đặt ở chế độ riêng tư (Unavailable). Bạn không được phép xem video này.',
+        () => {
+          const input = document.getElementById('inputYoutubeUrl');
+          if (input) { input.value = ''; input.focus(); }
+        }
+      );
+      return;
     }
+
+    if (meta) {
+      if (!title && meta.title) title = meta.title;
+      if (!channel && meta.channel) channel = meta.channel;
+      if (lengthSeconds === null && meta.lengthSeconds !== null && meta.lengthSeconds !== undefined) {
+        lengthSeconds = meta.lengthSeconds;
+      }
+    }
+
+    // Fallback probe duration client-side if not yet known
+    if (lengthSeconds === null || lengthSeconds === undefined) {
+      try {
+        const probed = await probeYouTubeDuration(videoId);
+        if (probed && probed > 0) {
+          lengthSeconds = Math.round(probed);
+        }
+      } catch (_) {}
+    }
+
+    // STRICT 8-MINUTE DURATION LIMIT CHECK (<= 480 seconds)
+    if (lengthSeconds && lengthSeconds > MAX_VIDEO_DURATION_SECONDS) {
+      showVideoLimitPopup(
+        title || `ID: ${videoId}`,
+        lengthSeconds,
+        () => {
+          const input = document.getElementById('inputYoutubeUrl');
+          if (input) { input.value = ''; input.focus(); }
+        }
+      );
+      return;
+    }
+
+    title = title || `Video #${videoId}`;
+    channel = channel || 'YouTube Creator';
 
     const newItem = {
       id: 'q-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
@@ -3142,6 +3386,13 @@
         break;
 
       case 'USER_JOINED':
+      case 'VIDEO_LIMIT_REJECTED':
+        showVideoLimitPopup(data.title, data.lengthSeconds, () => {
+          const input = document.getElementById('inputYoutubeUrl');
+          if (input) { input.value = ''; input.focus(); }
+        });
+        break;
+
       case 'PEER_JOIN':
       case 'INIT_USER':
         if (data.user && data.user.id && data.user.id !== state.me.id) {
@@ -4107,6 +4358,10 @@
       try {
         const cur = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
         const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
+        if (dur && dur > MAX_VIDEO_DURATION_SECONDS) {
+          enforceVideoLimit(dur);
+          return;
+        }
         const buf = ytPlayer.getVideoLoadedFraction ? ytPlayer.getVideoLoadedFraction() : 0;
         updateScrubberUI(cur, dur, buf);
       } catch (err) {}
@@ -4398,6 +4653,16 @@
       }
     });
 
+    // Video Duration Limit Modal Events
+    document.getElementById('btnConfirmVideoLimit')?.addEventListener('click', () => {
+      hideVideoLimitPopup();
+    });
+    document.getElementById('videoLimitModal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'videoLimitModal') {
+        hideVideoLimitPopup();
+      }
+    });
+
     // Global PostMessage listener for YouTube Player Iframe errors
     window.addEventListener('message', (event) => {
       try {
@@ -4427,6 +4692,17 @@
           return;
         }
       }
+
+      const vlModal = document.getElementById('videoLimitModal');
+      if (vlModal && vlModal.classList.contains('open')) {
+        if (e.key === 'Escape' || e.key === 'Enter') {
+          e.preventDefault();
+          hideVideoLimitPopup();
+          return;
+        }
+      }
+
+      
 
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
         if (e.key === 'Escape') {

@@ -223,6 +223,38 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // API: Get YouTube Video Info (Duration & Availability) - Enforces <= 8 mins limit
+  if (pathname === '/api/video-info') {
+    const vid = parsedUrl.searchParams.get('id') || '';
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=UTF-8',
+      'Access-Control-Allow-Origin': '*'
+    });
+    if (!vid) return res.end(JSON.stringify({ error: 'Missing video id' }));
+    try {
+      const resp = await fetch(`https://www.youtube.com/watch?v=${encodeURIComponent(vid)}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(4000)
+      });
+      const html = await resp.text();
+      const lenMatch = html.match(/"lengthSeconds":"(\d+)"/);
+      const titleMatch = html.match(/<title>([^<]+)<\/title>/);
+      const isLive = html.includes('"isLive":true') || html.includes('"isLiveContent":true');
+      const lengthSeconds = isLive ? 999999 : (lenMatch ? parseInt(lenMatch[1], 10) : null);
+      const title = titleMatch ? titleMatch[1].replace(' - YouTube', '').trim() : '';
+      const isUnavailable = html.includes('Video unavailable') || html.includes('"playabilityStatus":{"status":"UNPLAYABLE"') || html.includes('"status":"ERROR"');
+      return res.end(JSON.stringify({
+        videoId: vid,
+        lengthSeconds,
+        title,
+        isLive,
+        available: !isUnavailable
+      }));
+    } catch (err) {
+      return res.end(JSON.stringify({ videoId: vid, lengthSeconds: null, error: err.message }));
+    }
+  }
+
   // API: Get Server & Network Info for Friends Invite Link
   if (pathname === '/api/info') {
     const netAddrs = getNetworkAddresses();
@@ -599,6 +631,17 @@ function handleClientMessage(ws, data) {
 
     case 'ADD_QUEUE': {
       if (!data.item || !data.item.videoId) return;
+      // Duration limit: max 480 seconds (8 minutes)
+      if (data.item.lengthSeconds && data.item.lengthSeconds > 480) {
+        ws.send({
+          type: 'VIDEO_LIMIT_REJECTED',
+          videoId: data.item.videoId,
+          title: data.item.title,
+          lengthSeconds: data.item.lengthSeconds,
+          message: 'Video dài quá 8 phút. Vui lòng chọn bài khác!'
+        });
+        return;
+      }
       if (!roomState.queue.some((q) => q.id === data.item.id)) {
         roomState.queue.push({
           ...data.item,
@@ -694,6 +737,9 @@ function handleClientMessage(ws, data) {
 
     case 'LOAD_VIDEO': {
       if (!data.video || !data.video.videoId) return;
+      if (data.video.lengthSeconds && data.video.lengthSeconds > 480) {
+        return;
+      }
       roomState.currentVideo = {
         videoId: data.video.videoId,
         title: data.video.title,

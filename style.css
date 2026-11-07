@@ -3243,3 +3243,34 @@ body.is-dragging-camera .seat-speech-bubble {
 .uv-btn-confirm:active {
   transform: translateY(0);
 }
+
+/* ==========================================================================
+   VIDEO DURATION LIMIT WARNING POP-UP MODAL (<= 8 MINS LIMIT)
+   ========================================================================== */
+.video-limit-modal-card {
+  max-width: 460px;
+  background: linear-gradient(145deg, rgba(32, 22, 10, 0.98), rgba(18, 14, 8, 0.98));
+  border: 1px solid rgba(245, 158, 11, 0.55);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.92), 0 0 35px rgba(245, 158, 11, 0.35);
+}
+
+.vl-icon {
+  font-size: 3.4rem;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 0 18px rgba(245, 158, 11, 0.7));
+}
+
+.vl-title {
+  color: #FBBF24 !important;
+}
+
+.vl-btn-confirm {
+  background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%) !important;
+  box-shadow: 0 4px 18px rgba(245, 158, 11, 0.5) !important;
+  color: #FFF !important;
+}
+
+.vl-btn-confirm:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 26px rgba(245, 158, 11, 0.75) !important;
+}
