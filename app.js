@@ -33,17 +33,7 @@
     }
   ];
 
-  const INITIAL_QUEUE = [
-    {
-      id: 'q-1',
-      videoId: '9B0yX0UIN9M',
-      title: 'I Really Want to Stay at Your House',
-      channel: 'Samuel Kim, Lorien - Topic',
-      addedBy: 'Hanzu Cinema',
-      votes: 1,
-      ambilight: ['#38BDF8', '#EC4899']
-    }
-  ];
+  const INITIAL_QUEUE = [];
 
   const INITIAL_FRIENDS = [];
   const BOT_CHAT_LINES = [];
@@ -185,6 +175,7 @@
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       if (parsed && Array.isArray(parsed.queue) && Date.now() - (parsed.timestamp || 0) < 12 * 3600 * 1000) {
+        parsed.queue = parsed.queue.filter((q) => q && q.id !== 'q-1' && q.addedBy !== 'Hanzu Cinema');
         return parsed;
       }
     } catch (_) {}
@@ -211,7 +202,7 @@
     botsEnabled: false,
 
     // Local set of song IDs voted by THIS client (prevents sync overwrite bug)
-    localVotedSongIds: new Set(['q-1']),
+    localVotedSongIds: new Set(),
 
     // Camera & 3D Transform State
     cameraMode: 'orbit', // 'orbit' | 'pov' | 'overview'
@@ -2031,9 +2022,19 @@
     if (state.queue && state.queue.length > 0) {
       playNextFromQueue('Video đã kết thúc');
     } else {
-      showToast('🎵 Đã phát xong video! Hàng đợi hiện đang trống.');
+      showToast('🎬 Đã phát xong video! Hàng đợi hiện đang trống.');
       state.skipVotes.clear();
       updateSkipVoteUI();
+      clearCinemaScreen();
+      renderQueue();
+      saveLiveQueueToStorage();
+      broadcastSync({
+        type: 'QUEUE_ADVANCE',
+        nextVideo: null,
+        currentVideo: null,
+        queue: [],
+        reason: 'Đã phát xong video! Hàng đợi hiện đang trống'
+      });
     }
   }
 
@@ -2937,7 +2938,7 @@
 
           // CRITICAL: Always synchronize live queue, even if empty ([])
           if (Array.isArray(data.queue)) {
-            state.queue = data.queue;
+            state.queue = (data.queue || []).filter((q) => q && q.id !== 'q-1');
             saveLiveQueueToStorage();
             renderQueue();
             updateSkipVoteUI();

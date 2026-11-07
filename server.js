@@ -30,18 +30,8 @@ const MIME_TYPES = {
   '.ttf': 'font/ttf'
 };
 
-// Initial Preset Queue
-const INITIAL_QUEUE = [
-  {
-    id: 'q-1',
-    videoId: '9B0yX0UIN9M',
-    title: 'I Really Want to Stay at Your House',
-    channel: 'Samuel Kim, Lorien - Topic',
-    addedBy: 'Hanzu Cinema',
-    votes: 1,
-    ambilight: ['#38BDF8', '#EC4899']
-  }
-];
+// Initial Preset Queue (Empty by default: viewers propose songs)
+const INITIAL_QUEUE = [];
 
 // Single Source of Truth for the Hanzu Cinema Room
 const roomState = {
