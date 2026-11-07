@@ -335,10 +335,6 @@
               <span style="opacity:0.75;font-size:0.75rem;margin-left:3px;">✏️</span>
             </button>
 
-            <button class="icon-btn" id="btnOpenSettings" title="Cài đặt & Đổi tên khán giả">
-              ⚙️ Đổi tên
-            </button>
-
             <button class="icon-btn" id="btnToggleLights" title="Tắt/Bật đèn rạp (Phím tắt: L)">
               💡 Đèn rạp
             </button>
