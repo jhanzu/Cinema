@@ -160,6 +160,10 @@ function advanceRoomQueue(reasonText) {
     title: nextVideo.title,
     channel: nextVideo.channel || 'YouTube Cinema',
     startedBy: nextVideo.addedBy || 'Khán giả',
+    addedByUserId: nextVideo.addedByUserId || null,
+    addedByClientId: nextVideo.addedByClientId || null,
+    startedByUserId: nextVideo.startedByUserId || null,
+    startedByClientId: nextVideo.startedByClientId || null,
     ambilight: nextVideo.ambilight || ['#3B82F6', '#8B5CF6'],
     isPlaying: true,
     startTime: Date.now()
@@ -562,7 +566,11 @@ function handleClientMessage(ws, data) {
     case 'ADD_QUEUE': {
       if (!data.item || !data.item.videoId) return;
       if (!roomState.queue.some((q) => q.id === data.item.id)) {
-        roomState.queue.push({ ...data.item });
+        roomState.queue.push({
+          ...data.item,
+          addedByUserId: data.item.addedByUserId || ws.userId || null,
+          addedByClientId: data.item.addedByClientId || null
+        });
         broadcast({
           type: 'QUEUE_UPDATE',
           queue: roomState.queue
@@ -632,6 +640,9 @@ function handleClientMessage(ws, data) {
         title: picked.title,
         channel: picked.channel || 'YouTube Cinema',
         startedBy: picked.addedBy || 'Khán giả',
+        addedByUserId: picked.addedByUserId || ws.userId || null,
+        addedByClientId: picked.addedByClientId || null,
+        startedByUserId: ws.userId || null,
         ambilight: picked.ambilight || ['#3B82F6', '#8B5CF6'],
         isPlaying: true,
         startTime: Date.now()
@@ -653,6 +664,10 @@ function handleClientMessage(ws, data) {
         title: data.video.title,
         channel: data.video.channel || 'YouTube Cinema',
         startedBy: data.video.startedBy || (ws.userId && roomState.occupants[ws.userId]?.name) || 'Khán giả',
+        addedByUserId: data.video.addedByUserId || ws.userId || null,
+        addedByClientId: data.video.addedByClientId || null,
+        startedByUserId: data.video.startedByUserId || ws.userId || null,
+        startedByClientId: data.video.startedByClientId || null,
         ambilight: data.video.ambilight || ['#3B82F6', '#8B5CF6'],
         isPlaying: true,
         startTime: Date.now() - (data.currentTime ? data.currentTime * 1000 : 0)
@@ -673,6 +688,10 @@ function handleClientMessage(ws, data) {
           title: data.nextVideo.title,
           channel: data.nextVideo.channel || 'YouTube Cinema',
           startedBy: data.nextVideo.addedBy || 'Khán giả',
+          addedByUserId: data.nextVideo.addedByUserId || null,
+          addedByClientId: data.nextVideo.addedByClientId || null,
+          startedByUserId: data.nextVideo.startedByUserId || null,
+          startedByClientId: data.nextVideo.startedByClientId || null,
           ambilight: data.nextVideo.ambilight || ['#3B82F6', '#8B5CF6'],
           isPlaying: true,
           startTime: Date.now()
@@ -686,6 +705,41 @@ function handleClientMessage(ws, data) {
           currentVideo: roomState.currentVideo,
           queue: roomState.queue,
           reason: data.reason
+        }, ws);
+      }
+      break;
+    }
+
+    case 'UNAVAILABLE_VIDEO_PURGE': {
+      const vidId = data.videoId;
+      if (vidId) {
+        roomState.queue = roomState.queue.filter((q) => q.videoId !== vidId);
+        if (roomState.currentVideo && roomState.currentVideo.videoId === vidId) {
+          if (roomState.queue.length > 0) {
+            const nextVid = roomState.queue.shift();
+            roomState.currentVideo = {
+              videoId: nextVid.videoId,
+              title: nextVid.title,
+              channel: nextVid.channel || 'YouTube Cinema',
+              startedBy: nextVid.addedBy || 'Khán giả',
+              addedByUserId: nextVid.addedByUserId || null,
+              addedByClientId: nextVid.addedByClientId || null,
+              startedByUserId: nextVid.startedByUserId || null,
+              startedByClientId: nextVid.startedByClientId || null,
+              ambilight: nextVid.ambilight || ['#3B82F6', '#8B5CF6'],
+              isPlaying: true,
+              startTime: Date.now()
+            };
+          } else {
+            roomState.currentVideo = null;
+          }
+        }
+        roomState.skipVotes.clear();
+        broadcast({
+          type: 'UNAVAILABLE_VIDEO_PURGE',
+          videoId: vidId,
+          nextVideo: roomState.currentVideo,
+          queue: roomState.queue
         }, ws);
       }
       break;

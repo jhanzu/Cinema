@@ -1420,34 +1420,138 @@
   const failedVideoIds = new Set();
   let videoLoadWatchdogTimer = null;
 
+  /**
+   * Helper: Check if a video was submitted or initiated by the local user
+   */
+  function isMySubmittedVideo(videoObj) {
+    if (!videoObj) return false;
+    // System default tracks are never considered user-submitted
+    if (videoObj.startedBy === 'Hanzu Cinema' || videoObj.addedBy === 'Hanzu Cinema') return false;
+
+    // 1. Direct unique ID matches
+    if (videoObj.addedByUserId && videoObj.addedByUserId === state.me.id) return true;
+    if (videoObj.addedByClientId && videoObj.addedByClientId === state.clientId) return true;
+    if (videoObj.startedByUserId && videoObj.startedByUserId === state.me.id) return true;
+    if (videoObj.startedByClientId && videoObj.startedByClientId === state.clientId) return true;
+
+    // 2. Exact signature matches
+    const mySignature = `${state.me.name} (${state.me.seat})`.trim().toLowerCase();
+    const addedByStr = String(videoObj.addedBy || '').trim().toLowerCase();
+    const startedByStr = String(videoObj.startedBy || '').trim().toLowerCase();
+    const myName = (state.me.name || '').trim().toLowerCase();
+
+    if (mySignature && (addedByStr === mySignature || startedByStr === mySignature)) return true;
+    if (myName && (addedByStr === myName || startedByStr === myName)) return true;
+
+    return false;
+  }
+
+  /**
+   * Reset cinema screen to clean standby placeholder when queue is completely empty
+   */
+  function clearCinemaScreen() {
+    state.currentVideo = null;
+    state.isPlaying = false;
+    hideVideoRescueCard();
+    clearTimeout(videoLoadWatchdogTimer);
+    updatePlayPauseButton();
+
+    const titleEl = document.getElementById('hudVideoTitle');
+    const metaEl = document.getElementById('hudVideoMeta');
+    const screenTitleEl = document.getElementById('screenTopTitle');
+    if (titleEl) titleEl.textContent = 'Chưa có video đang chiếu';
+    if (screenTitleEl) screenTitleEl.textContent = 'MÀN CHIẾU 3D ĐANG CHỜ';
+    if (metaEl) metaEl.textContent = 'Dán link YouTube ở cột bên phải để chiếu lên màn hình';
+    if (typeof updateScrubberUI === 'function') updateScrubberUI(0, 0, 0);
+    updateAmbilightColors(['#0F172A', '#1E293B']);
+
+    if (ytPlayer && typeof ytPlayer.stopVideo === 'function') {
+      try { ytPlayer.stopVideo(); } catch (_) {}
+    }
+    const inPageIframe = document.getElementById('inPageCinemaIframe');
+    if (inPageIframe) inPageIframe.src = 'about:blank';
+
+    const mount = document.getElementById('ytPlayerMount');
+    if (mount) {
+      mount.innerHTML = `
+        <div id="youtubePlayerContainer" style="display:none;"></div>
+        <div class="cinema-empty-screen-placeholder" style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#05070D;color:#94A3B8;gap:12px;font-family:Inter,sans-serif;user-select:none;">
+          <div style="font-size:3.2rem;filter:drop-shadow(0 0 18px rgba(56,189,248,0.4));">🎬</div>
+          <div style="font-size:1.1rem;font-weight:700;color:#F1F5F9;letter-spacing:0.02em;">Màn chiếu đang chờ video</div>
+          <div style="font-size:0.82rem;color:#64748B;">Hãy dán link YouTube hoặc chọn bài trong hàng đợi để chiếu</div>
+        </div>
+      `;
+    }
+    updateNextPlayingUI();
+  }
+
   function handleVideoPlayError(errCode) {
     clearTimeout(videoLoadWatchdogTimer);
-    if (isShowingUnavailableModal) return;
     const currentVid = state.currentVideo;
     if (!currentVid || !currentVid.videoId) return;
 
-    isShowingUnavailableModal = true;
-    failedVideoIds.add(currentVid.videoId);
+    const failedVidId = currentVid.videoId;
+    if (failedVideoIds.has(failedVidId)) {
+      return; // Already handled this failed video
+    }
+    failedVideoIds.add(failedVidId);
 
-    // Specific explanation per YouTube API error codes
-    let errText = 'Chủ sở hữu video hoặc YouTube không cho phép phát video này trên website bên ngoài (Chặn nhúng bản quyền hoặc giới hạn khu vực).';
-    if (errCode === 100) {
-      errText = 'Video đã bị tác giả xóa, chuyển sang chế độ riêng tư hoặc liên kết không tồn tại trên YouTube.';
-    } else if (errCode === 2) {
-      errText = 'Đường link hoặc ID video YouTube này không đúng định dạng.';
-    } else if (errCode === 5) {
-      errText = 'Không thể phát nội dung này trong trình phát HTML5 của trình duyệt.';
+    // 1. Immediately halt playback on player
+    if (ytPlayer) {
+      try {
+        if (typeof ytPlayer.stopVideo === 'function') ytPlayer.stopVideo();
+        else if (typeof ytPlayer.pauseVideo === 'function') ytPlayer.pauseVideo();
+      } catch (_) {}
     }
 
-    showUnavailableVideoPopup(
-      currentVid.title || `Video #${currentVid.videoId}`,
-      errText,
-      () => {
-        isShowingUnavailableModal = false;
-        playNextFromQueue('Bỏ qua video không thể xem');
-        showToast('⏭️ Đã chuyển sang bài hát tiếp theo trong hàng đợi.');
-      }
+    // 2. Xoá queue của bài này (không để xuất hiện hay phát nữa)
+    state.queue = (state.queue || []).filter(
+      (item) => item.videoId !== failedVidId && (!currentVid.id || item.id !== currentVid.id)
     );
+    state.skipVotes.clear();
+    renderQueue();
+    updateSkipVoteUI();
+    updateNextPlayingUI();
+
+    // 3. Broadcast sync to all clients in the room to purge this video from queue & cinema screen
+    broadcastSync({
+      type: 'UNAVAILABLE_VIDEO_PURGE',
+      videoId: failedVidId,
+      queue: state.queue
+    });
+
+    // 4. Không phát trên màn chiếu nữa: chuyển bài tiếp theo hoặc chuyển về màn hình chờ
+    if (state.queue && state.queue.length > 0) {
+      playNextFromQueue('Bỏ qua video không thể xem (Unavailable)');
+    } else {
+      clearCinemaScreen();
+    }
+
+    // 5. Màn hình cảnh báo pop-up SẼ CHỈ XUẤT HIỆN VỚI NGƯỜI GỬI LINK
+    const isSender = isMySubmittedVideo(currentVid);
+
+    if (isSender) {
+      isShowingUnavailableModal = true;
+      let errText = 'Chủ sở hữu video hoặc YouTube không cho phép phát video này trên website bên ngoài (Chặn nhúng bản quyền hoặc giới hạn khu vực).';
+      if (errCode === 100) {
+        errText = 'Video đã bị tác giả xóa, chuyển sang chế độ riêng tư hoặc liên kết không tồn tại trên YouTube.';
+      } else if (errCode === 2) {
+        errText = 'Đường link hoặc ID video YouTube này không đúng định dạng.';
+      } else if (errCode === 5) {
+        errText = 'Không thể phát nội dung này trong trình phát HTML5 của trình duyệt.';
+      }
+
+      showUnavailableVideoPopup(
+        currentVid.title || `Video #${failedVidId}`,
+        errText,
+        () => {
+          isShowingUnavailableModal = false;
+        }
+      );
+    } else {
+      // Với những khán giả khác: Không hiện pop-up làm gián đoạn, chỉ hiện thông báo toast nhẹ nhàng
+      showToast(`⚠️ Video "${currentVid.title || 'này'}" bị hạn chế bản quyền/không thể xem nên hệ thống đã tự động gỡ khỏi rạp.`);
+    }
   }
 
   async function findPlayableAlternative(title, failedId) {
@@ -1940,10 +2044,16 @@
     }
 
     state.currentVideo = {
+      id: videoObj.id || null,
       videoId: videoObj.videoId,
       title: videoObj.title,
       channel: videoObj.channel || 'YouTube Cinema',
-      startedBy: videoObj.addedBy || videoObj.startedBy || state.me.name,
+      startedBy: videoObj.startedBy || videoObj.addedBy || state.me.name,
+      addedBy: videoObj.addedBy || videoObj.startedBy || state.me.name,
+      addedByUserId: videoObj.addedByUserId || videoObj.startedByUserId || (broadcast ? state.me.id : null),
+      addedByClientId: videoObj.addedByClientId || videoObj.startedByClientId || (broadcast ? state.clientId : null),
+      startedByUserId: videoObj.startedByUserId || (broadcast ? state.me.id : null),
+      startedByClientId: videoObj.startedByClientId || (broadcast ? state.clientId : null),
       ambilight: videoObj.ambilight || randomAmbilightPair()
     };
     state.skipVotes.clear();
@@ -2281,6 +2391,18 @@
   }
 
   async function addVideoToQueue(videoId, customTitle, customChannel) {
+    if (failedVideoIds.has(videoId)) {
+      showUnavailableVideoPopup(
+        customTitle || `ID: ${videoId}`,
+        'Video này đã được xác nhận là không thể phát trong rạp (do chặn bản quyền nhúng hoặc bị tác giả xóa). Bạn không thể đề xuất lại video này.',
+        () => {
+          const input = document.getElementById('inputYoutubeUrl');
+          if (input) { input.value = ''; input.focus(); }
+        }
+      );
+      return;
+    }
+
     if (state.queue.some((item) => item.videoId === videoId)) {
       showToast('⚡ Video này đã có trong danh sách bình chọn, hãy bấm Vote nhé!');
       return;
@@ -2292,6 +2414,8 @@
       showToast('🔍 Đang kiểm tra link video từ YouTube...');
       const meta = await fetchYouTubeMetadata(videoId);
       if (meta && meta.available === false) {
+        state.queue = (state.queue || []).filter((q) => q.videoId !== videoId);
+        renderQueue();
         showUnavailableVideoPopup(
           `ID: ${videoId}`,
           'Link video YouTube này không tồn tại, đã bị tác giả xóa hoặc đặt ở chế độ riêng tư (Unavailable). Bạn không được phép xem video này.',
@@ -2312,6 +2436,8 @@
       title,
       channel,
       addedBy: `${state.me.name} (${state.me.seat})`,
+      addedByUserId: state.me.id,
+      addedByClientId: state.clientId,
       votes: 1,
       ambilight: randomAmbilightPair()
     };
@@ -2349,6 +2475,9 @@
     const idx = state.queue.findIndex((q) => q.id === itemId);
     if (idx === -1) return;
     const [picked] = state.queue.splice(idx, 1);
+    picked.startedBy = state.me.name;
+    picked.startedByUserId = state.me.id;
+    picked.startedByClientId = state.clientId;
     state.skipVotes.clear();
     renderQueue();
     updateSkipVoteUI();
@@ -2367,6 +2496,7 @@
       showToast('⚠️ Hàng đợi đã hết bài hát! Hãy đề xuất thêm video mới.');
       state.skipVotes.clear();
       updateSkipVoteUI();
+      clearCinemaScreen();
       return;
     }
     const nextVideo = state.queue.shift();
@@ -2979,6 +3109,36 @@
             showToast(`⏭️ ${data.reason} • Đang phát: ${vid.title}`);
           }
           loadAndPlayVideo(vid, false);
+        }
+        break;
+
+      case 'UNAVAILABLE_VIDEO_PURGE':
+        if (data.videoId) {
+          failedVideoIds.add(data.videoId);
+          state.queue = (state.queue || []).filter(
+            (q) => q.videoId !== data.videoId && (!data.id || q.id !== data.id)
+          );
+          state.skipVotes.clear();
+          renderQueue();
+          updateSkipVoteUI();
+          updateNextPlayingUI();
+
+          if (state.currentVideo && state.currentVideo.videoId === data.videoId) {
+            if (ytPlayer) {
+              try {
+                if (typeof ytPlayer.stopVideo === 'function') ytPlayer.stopVideo();
+                else if (typeof ytPlayer.pauseVideo === 'function') ytPlayer.pauseVideo();
+              } catch (_) {}
+            }
+            if (data.nextVideo && data.nextVideo.videoId) {
+              loadAndPlayVideo(data.nextVideo, false);
+            } else if (state.queue.length > 0) {
+              playNextFromQueue('Đã gỡ video không thể xem khỏi rạp');
+            } else {
+              clearCinemaScreen();
+            }
+          }
+          showToast(`⚠️ Video bị hạn chế bản quyền đã được tự động gỡ khỏi rạp.`);
         }
         break;
 
