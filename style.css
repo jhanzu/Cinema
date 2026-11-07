@@ -981,7 +981,7 @@ body.is-dragging-camera iframe,
   height: 56px;
   transform-style: preserve-3d;
   cursor: pointer;
-  contain: layout style paint;
+  contain: layout style;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   will-change: transform;
@@ -1042,9 +1042,8 @@ body.is-dragging-camera iframe,
   border-radius: 9px 9px 3px 3px;
   box-shadow: 0 5px 14px rgba(0, 0, 0, 0.85);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding-top: 5px;
 }
 
 /* Front plush cushion facing the cinema screen with built-in realistic stitch lines */
@@ -1356,26 +1355,26 @@ body.is-dragging-camera iframe,
   border-color: #F59E0B;
 }
 
-/* Centered Occupant Name Badge on 3D Seat */
+/* Centered Occupant Name Badge FLOATING ABOVE 3D Seat */
 .chair-name-badge {
   position: absolute;
-  top: -30px;
+  top: -26px;
   left: 50%;
-  transform: translateX(-50%) translateZ(32px);
+  transform: translateX(-50%) translateZ(28px);
   display: none;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  padding: 3px 10px;
+  gap: 4px;
+  padding: 3px 9px;
   background: linear-gradient(135deg, #EF4444 0%, #DC2626 50%, #B91C1C 100%) !important;
   border: 1.5px solid #FCA5A5 !important;
   border-radius: 999px;
   color: #FFFFFF !important;
-  font-size: 0.72rem;
+  font-size: 0.70rem;
   font-weight: 800;
   white-space: nowrap;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.9), 0 0 16px rgba(239, 68, 68, 0.95);
-  z-index: 35;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.9), 0 0 14px rgba(239, 68, 68, 0.95);
+  z-index: 100;
   pointer-events: none;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
   letter-spacing: 0.01em;
@@ -1386,31 +1385,11 @@ body.is-dragging-camera iframe,
   display: none !important;
 }
 
-/* Chair Occupant Nameplate on Back of 3D Chair */
-.chair-occupant-name {
-  display: none;
-  font-size: 0.58rem;
-  font-weight: 800;
-  color: #FFF;
-  background: rgba(220, 38, 38, 0.95);
-  padding: 2px 6px;
-  border-radius: 4px;
-  max-width: 42px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  margin-top: 3px;
-  border: 1px solid rgba(254, 202, 202, 0.7);
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
-  letter-spacing: -0.01em;
-  text-align: center;
-}
-
+/* Strictly hide the old in-chair truncated name box completely */
+.chair-occupant-name,
+.seat-3d-node.occupied .chair-occupant-name,
 .seat-3d-node.my-seat .chair-occupant-name {
-  background: rgba(220, 38, 38, 0.95);
-  color: #FFF;
-  border-color: #FCA5A5;
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
+  display: none !important;
 }
 
 /* 3D Occupied Seats (VIVID CINEMA RED COLOR) - Both self & peers */

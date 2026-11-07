@@ -303,6 +303,7 @@ server.on('upgrade', (req, socket, head) => {
     }
   };
 
+  ws.isAlive = true;
   connectedClients.set(ws, { id: ws.id, user: null, socket });
 
   let buffer = Buffer.alloc(0);

@@ -755,11 +755,25 @@
 
   function getOccupantMap() {
     const map = {};
-    // Peers from other tabs
+    const now = Date.now();
+    const seenUserIds = new Set();
+    seenUserIds.add(state.me.id);
+
+    // Peers from other tabs/clients (only active, fresh peers)
     Object.values(state.peers).forEach((p) => {
-      if (p.seat && p.id !== state.me.id) {
-        map[p.seat] = { ...p, isMe: false };
+      if (!p || !p.seat || p.id === state.me.id) return;
+      if (seenUserIds.has(p.id)) return; // Prevent duplicate entries for same user
+
+      // Check if peer is stale (no heartbeat in 18s)
+      const lastSeen = peerLastSeen[p.id] || p.lastSeen || now;
+      if (now - lastSeen > 18000) {
+        delete state.peers[p.id];
+        delete peerLastSeen[p.id];
+        return;
       }
+
+      seenUserIds.add(p.id);
+      map[p.seat] = { ...p, isMe: false };
     });
 
     // Local user always overrides their chosen seat
@@ -807,8 +821,8 @@
           }
           node3D.title = person.isMe ? `Ghế của bạn (${person.name})` : `Ghế ${code} - Đã có "${person.name}" ngồi (Không thể chọn)`;
           if (chairOccEl) {
-            chairOccEl.textContent = person.isMe ? `${person.name} (Bạn)` : person.name;
-            chairOccEl.style.display = 'block';
+            chairOccEl.textContent = '';
+            chairOccEl.style.display = 'none';
           }
           if (chairBadgeEl) {
             chairBadgeEl.innerHTML = `<span style="font-size:0.74rem;">${person.emoji || '👤'}</span> <span>${escapeHtml(person.name)}${person.isMe ? ' (Bạn)' : ''}</span>`;
@@ -896,12 +910,22 @@
   function selectSeat(seatCode, silent = false) {
     if (!seatCoordMap[seatCode]) return;
 
-    // Check if another person is already sitting in this seat
+    // Check if another live person is currently occupying this seat
     const occupants = getOccupantMap();
-    if (occupants[seatCode] && !occupants[seatCode].isMe) {
-      if (sfx && typeof sfx.playReactionPop === 'function') sfx.playReactionPop();
-      showToast(`🚫 Ghế ${seatCode} đã có bạn "${occupants[seatCode].name}" ngồi rồi! Bạn không thể ngồi lên ghế này.`);
-      return;
+    const occ = occupants[seatCode];
+    if (occ && !occ.isMe) {
+      const now = Date.now();
+      const lastSeen = (occ.id && peerLastSeen[occ.id]) || (occ.id && state.peers[occ.id]?.lastSeen) || 0;
+      if (occ.id && now - lastSeen > 15000) {
+        // Ghost peer expired -> evict it immediately and proceed to sit!
+        delete state.peers[occ.id];
+        delete peerLastSeen[occ.id];
+        refreshSeatsVisuals();
+      } else {
+        if (sfx && typeof sfx.playReactionPop === 'function') sfx.playReactionPop();
+        showToast(`🚫 Ghế ${seatCode} đã có bạn "${occ.name}" ngồi rồi! Bạn không thể ngồi lên ghế này.`);
+        return;
+      }
     }
 
     const prevSeat = state.me.seat;
@@ -2609,12 +2633,25 @@
       case 'ROOM_SYNC_REPLY':
         if (!data.targetClientId || data.targetClientId === state.clientId) {
           if (data.occupants) {
+            state.peers = {};
+            const now = Date.now();
             Object.values(data.occupants).forEach((occ) => {
-              if (occ.id !== state.me.id) {
-                state.peers[occ.id] = occ;
-                peerLastSeen[occ.id] = Date.now();
+              if (occ.id !== state.me.id && occ.seat) {
+                state.peers[occ.id] = { ...occ, lastSeen: now };
+                peerLastSeen[occ.id] = now;
               }
             });
+
+            // If incoming room state has someone on my default seat, auto-relocate to a free seat
+            if (data.occupants[state.me.seat] && data.occupants[state.me.seat].id !== state.me.id) {
+              const freeSeat = findRandomFreeSeat(state.me.seat);
+              state.me.seat = freeSeat;
+              saveProfileToStorage();
+              const seatPill = document.getElementById('myNavSeat');
+              if (seatPill) seatPill.textContent = freeSeat;
+              broadcastSync({ type: 'SEAT_CHANGE', seat: freeSeat, user: state.me });
+            }
+
             refreshSeatsVisuals();
             updateSkipVoteUI();
           }
@@ -2646,6 +2683,9 @@
 
       case 'HEARTBEAT':
         if (data.user && data.user.id && data.user.id !== state.me.id) {
+          const now = Date.now();
+          data.user.lastSeen = now;
+          peerLastSeen[data.user.id] = now;
           const prev = state.peers[data.user.id];
           const hasChange = !prev ||
             prev.seat !== data.user.seat ||
@@ -2654,7 +2694,6 @@
             prev.emoji !== data.user.emoji ||
             prev.color !== data.user.color;
           state.peers[data.user.id] = data.user;
-          peerLastSeen[data.user.id] = Date.now();
           if (hasChange) {
             refreshSeatsVisuals();
           }
@@ -2671,9 +2710,11 @@
         }
         if (data.occupants) {
           state.peers = {};
+          const now = Date.now();
           Object.values(data.occupants).forEach((occ) => {
-            if (occ.id !== state.me.id) {
-              state.peers[occ.id] = occ;
+            if (occ.id !== state.me.id && occ.seat) {
+              state.peers[occ.id] = { ...occ, lastSeen: now };
+              peerLastSeen[occ.id] = now;
             }
           });
           refreshSeatsVisuals();
@@ -2735,17 +2776,21 @@
         break;
 
       case 'USER_LEFT':
-        if (data.userId && state.peers[data.userId]) {
-          const departingUser = state.peers[data.userId];
-          delete state.peers[data.userId];
-          if (state.skipVotes.has(data.userId)) {
-            state.skipVotes.delete(data.userId);
+      case 'PEER_LEAVE': {
+        const leavingId = data.userId || data.peerId;
+        if (leavingId && state.peers[leavingId]) {
+          const departingUser = state.peers[leavingId];
+          delete state.peers[leavingId];
+          delete peerLastSeen[leavingId];
+          if (state.skipVotes.has(leavingId)) {
+            state.skipVotes.delete(leavingId);
           }
           refreshSeatsVisuals();
           updateSkipVoteUI();
           showToast(`Khán giả "${departingUser.name || 'Một người bạn'}" đã rời khỏi rạp.`);
         }
         break;
+      }
 
       case 'SEAT_CHANGE':
         if (data.userId && data.seat) {
@@ -3053,7 +3098,7 @@
                   clientId: state.clientId
                 });
 
-                // Periodic Heartbeat every 12s
+                // Periodic Heartbeat every 6s
                 clearInterval(peerHeartbeatTimer);
                 peerHeartbeatTimer = setInterval(() => {
                   if (mqttConnected) {
@@ -3063,11 +3108,12 @@
                       clientId: state.clientId
                     });
                   }
-                  // Prune stale peers inactive >35s
+                  // Prune stale peers inactive >15s
                   const now = Date.now();
                   let changed = false;
-                  Object.keys(peerLastSeen).forEach((pid) => {
-                    if (now - peerLastSeen[pid] > 35000) {
+                  Object.keys(state.peers).forEach((pid) => {
+                    const last = peerLastSeen[pid] || state.peers[pid]?.lastSeen || 0;
+                    if (now - last > 15000) {
                       delete peerLastSeen[pid];
                       delete state.peers[pid];
                       changed = true;
@@ -3077,7 +3123,7 @@
                     refreshSeatsVisuals();
                     updateSkipVoteUI();
                   }
-                }, 12000);
+                }, 6000);
               }
             });
           },
