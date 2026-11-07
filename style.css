@@ -988,12 +988,13 @@ body.is-dragging-camera iframe,
 }
 
 .seat-3d-node:hover {
-  filter: brightness(1.3);
+  filter: brightness(1.25);
+  transform: translateZ(6px);
 }
 
 .seat-3d-node.my-seat,
 .seat-3d-node:hover {
-  transition: filter 0.18s ease;
+  transition: transform 0.15s cubic-bezier(0.2, 0, 0, 1), filter 0.15s ease;
 }
 
 /* ==========================================================================
@@ -1006,11 +1007,12 @@ body.is-dragging-camera iframe,
   pointer-events: none;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+  will-change: transform;
 }
 
 .seat-3d-node.my-seat .chair-3d-model,
 .seat-3d-node:hover .chair-3d-model {
-  transition: transform 0.18s ease;
+  transition: transform 0.15s cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* 1. Volumetric 3D Backrest Box (Depth: 10px) */
@@ -2468,17 +2470,49 @@ body.is-dragging-camera iframe,
   gap: 14px;
 }
 
+.seatmap-action-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 8px;
+  font-size: 0.74rem;
+  color: #BAE6FD;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.btn-quick-switch {
+  background: linear-gradient(135deg, #0284C7 0%, #2563EB 100%);
+  color: #FFF;
+  border: 1px solid #93C5FD;
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.btn-quick-switch:hover {
+  filter: brightness(1.2);
+  transform: scale(1.05);
+}
+
 .mini-screen-indicator {
   width: 85%;
   margin: 4px auto 8px;
   height: 18px;
   border-radius: 50% 50% 0 0 / 100% 100% 0 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 78, 69, 0.45), transparent);
-  border-top: 2px solid var(--accent-red);
+  background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.45), transparent);
+  border-top: 2px solid #38BDF8;
   text-align: center;
   font-size: 0.64rem;
   font-weight: 800;
-  color: var(--text-secondary);
+  color: #BAE6FD;
   letter-spacing: 0.14em;
   line-height: 22px;
 }
@@ -2492,7 +2526,7 @@ body.is-dragging-camera iframe,
 .seat-cell-2d {
   aspect-ratio: 1;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   font-size: 0.62rem;
@@ -2502,17 +2536,42 @@ body.is-dragging-camera iframe,
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.15s;
+  user-select: none;
+  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+  will-change: transform;
 }
 
-.seat-cell-2d:hover {
-  transform: scale(1.12);
-  border-color: #fff;
-  color: #fff;
+.seat-cell-2d:hover:not(.occupied):not(.mine) {
+  transform: scale(1.18);
+  border-color: #38BDF8 !important;
+  background: rgba(56, 189, 248, 0.25) !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.7);
+  z-index: 2;
+}
+
+.seat-cell-2d:active:not(.occupied) {
+  transform: scale(0.92);
 }
 
 .seat-cell-2d.vip {
-  border-color: rgba(245, 158, 11, 0.35);
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
+.seat-cell-2d.mine {
+  background: linear-gradient(135deg, #0284C7 0%, #2563EB 100%) !important;
+  border: 1.5px solid #93C5FD !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.85) !important;
+  cursor: pointer !important;
+  font-weight: 800;
+}
+
+.seat-2d-mine-badge {
+  font-size: 0.52rem;
+  font-weight: 800;
+  color: #FEF08A;
+  letter-spacing: 0.04em;
 }
 
 .seat-cell-2d.occupied {
@@ -2538,17 +2597,6 @@ body.is-dragging-camera iframe,
   white-space: nowrap;
 }
 
-.seat-2d-mine-star {
-  font-size: 0.68rem;
-}
-
-.seat-cell-2d.mine {
-  background: var(--accent-gold);
-  border-color: #FEF08A;
-  color: #111;
-  box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
-}
-
 .seat-legend {
   display: flex;
   flex-wrap: wrap;
@@ -2562,6 +2610,22 @@ body.is-dragging-camera iframe,
   display: flex;
   align-items: center;
   gap: 5px;
+}
+
+.legend-swatch.mine-swatch {
+  background: linear-gradient(135deg, #0284C7 0%, #2563EB 100%);
+  border: 1px solid #93C5FD;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.7);
+}
+
+.legend-swatch.occupied-swatch {
+  background: #EF4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.7);
+}
+
+.legend-swatch.vip-swatch {
+  background: #222422;
+  border: 1px solid #F59E0B;
 }
 
 .legend-swatch {

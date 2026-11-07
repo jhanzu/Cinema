@@ -111,6 +111,23 @@ function assignAvailableSeat(preferredSeat, currentOccupants) {
 }
 
 /**
+ * Ensure viewer names are independent and unique across all active occupants
+ */
+function assignUniqueName(desiredName, currentOccupants, excludeId = null) {
+  let base = (desiredName || 'Khán giả').trim().slice(0, 24);
+  const isTaken = (n) => Object.values(currentOccupants).some(
+    (occ) => occ && occ.id !== excludeId && occ.name && occ.name.toLowerCase() === n.toLowerCase()
+  );
+  if (!isTaken(base)) return base;
+  const root = base.replace(/\s*[#(]\d+[)]?$/i, '').trim() || 'Khán giả';
+  let counter = 2;
+  while (isTaken(`${root} #${counter}`)) {
+    counter++;
+  }
+  return `${root} #${counter}`;
+}
+
+/**
  * Broadcast WebSocket packet to all connected clients (optionally excluding one)
  */
 function broadcast(payload, excludeWs = null) {
@@ -406,10 +423,14 @@ function handleClientMessage(ws, data) {
       const finalSeat = assignAvailableSeat(user.seat, roomState.occupants);
       user.seat = finalSeat;
 
+      // Ensure no two viewers have the exact same name
+      const finalName = assignUniqueName(user.name, roomState.occupants, user.id);
+      user.name = finalName;
+
       const gender = (user.gender === 'female' || user.gender === 'other') ? user.gender : 'male';
       roomState.occupants[user.id] = {
         id: user.id,
-        name: (user.name || 'Khán giả').trim().slice(0, 24),
+        name: finalName,
         gender: gender,
         seat: finalSeat,
         emoji: user.emoji || '😎',
@@ -427,6 +448,7 @@ function handleClientMessage(ws, data) {
       ws.send({
         type: 'ROOM_SYNC',
         assignedSeat: finalSeat,
+        assignedName: finalName,
         currentVideo: roomState.currentVideo,
         currentTime: elapsedSec,
         queue: roomState.queue,
@@ -494,7 +516,7 @@ function handleClientMessage(ws, data) {
     case 'PROFILE_UPDATE': {
       if (!ws.userId || !roomState.occupants[ws.userId] || !data.user) return;
       const occ = roomState.occupants[ws.userId];
-      if (data.user.name) occ.name = String(data.user.name).trim().slice(0, 24);
+      if (data.user.name) occ.name = assignUniqueName(data.user.name, roomState.occupants, ws.userId);
       if (data.user.gender) occ.gender = (data.user.gender === 'female' || data.user.gender === 'other') ? data.user.gender : 'male';
       if (data.user.emoji) occ.emoji = data.user.emoji;
       if (data.user.color) occ.color = data.user.color;

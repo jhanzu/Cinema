@@ -557,14 +557,18 @@
             <!-- Panel 3: 2D 100-Seat Map & Audience Roster -->
             <section class="sidebar-panel" id="panel-seats">
               <div class="seatmap-panel-body">
-                <div class="mini-screen-indicator">MÀN CHIẾU CHÍNH</div>
+                <div class="seatmap-action-hint">
+                  <span>👆 <strong>Bấm vào ô ghế trống</strong> để đổi chỗ ngồi ngay lập tức</span>
+                  <button class="btn-quick-switch" id="btnSidebarRandomSeat" type="button" title="Đổi sang một ghế trống ngẫu nhiên">🎲 Đổi ngẫu nhiên</button>
+                </div>
+                <div class="mini-screen-indicator">MÀN CHIẾU CHÍNH (SÂN KHẤU)</div>
                 <div class="seat-grid-2d" id="seatGrid2D"></div>
                 <div class="seat-legend">
-                  <div class="legend-item"><span class="legend-swatch" style="background:#F59E0B"></span> Ghế của bạn</div>
-                  <div class="legend-item"><span class="legend-swatch" style="background:#EF4444;box-shadow:0 0 6px rgba(239,68,68,0.7)"></span> Đã có người ngồi (Khóa)</div>
-                  <div class="legend-item"><span class="legend-swatch" style="background:#222422;border:1px solid #F59E0B"></span> Ghế VIP (Hàng E-F)</div>
+                  <div class="legend-item"><span class="legend-swatch mine-swatch"></span> Ghế của bạn (BẠN)</div>
+                  <div class="legend-item"><span class="legend-swatch occupied-swatch"></span> Đã có người ngồi (Khóa)</div>
+                  <div class="legend-item"><span class="legend-swatch vip-swatch"></span> Ghế VIP (Hàng E-F)</div>
                 </div>
-                <div style="font-size:0.76rem;font-weight:700;color:var(--text-secondary);margin-top:4px;">
+                <div style="font-size:0.76rem;font-weight:700;color:var(--text-secondary);margin-top:6px;">
                   DANH SÁCH KHÁN GIẢ TRONG RẠP
                 </div>
                 <div class="audience-roster" id="audienceRosterContainer"></div>
@@ -594,8 +598,9 @@
             </div>
 
             <form id="formSaveProfile">
-              <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:6px;">1. Tên hiển thị trên ghế 3D</label>
-              <input type="text" class="text-input" id="inputProfileName" style="width:100%;margin-bottom:12px;" value="${escapeHtml(state.me.name)}" maxlength="20" placeholder="Nhập tên hoặc nickname..." required />
+              <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:6px;">1. Tên hiển thị trên ghế 3D (Độc lập, không trùng lặp)</label>
+              <input type="text" class="text-input" id="inputProfileName" style="width:100%;margin-bottom:8px;" value="${escapeHtml(state.me.name)}" maxlength="20" placeholder="Nhập tên hoặc nickname..." required />
+              <div id="nameDuplicateWarning" style="display:none;color:#FBBF24;font-size:0.72rem;margin-top:-4px;margin-bottom:10px;font-weight:700;"></div>
 
               <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;">2. Giới tính của bạn</label>
               <div class="gender-selector-grid" id="genderSelectorGrid">
@@ -781,7 +786,10 @@
       if (seenUserIds.has(p.id)) return; // Prevent duplicate entries for same user
 
       // Check if peer is stale (no heartbeat in 18s)
-      const lastSeen = peerLastSeen[p.id] || p.lastSeen || now;
+      if (!peerLastSeen[p.id]) {
+        peerLastSeen[p.id] = p.lastSeen || now;
+      }
+      const lastSeen = peerLastSeen[p.id];
       if (now - lastSeen > 18000) {
         delete state.peers[p.id];
         delete peerLastSeen[p.id];
@@ -795,6 +803,36 @@
     // Local user always overrides their chosen seat
     map[state.me.seat] = { ...state.me, isMe: true };
     return map;
+  }
+
+  /**
+   * Helper: Check if a viewer name is already taken by someone else in the room
+   */
+  function isNameTaken(name, excludeUserId = null) {
+    if (!name) return false;
+    const clean = String(name).trim().toLowerCase();
+    const occupants = getOccupantMap();
+    return Object.values(occupants).some((occ) => {
+      if (!occ || !occ.name) return false;
+      if (excludeUserId && occ.id === excludeUserId) return false;
+      return occ.name.trim().toLowerCase() === clean;
+    });
+  }
+
+  /**
+   * Helper: Generate a distinctive, unique viewer name without duplicates
+   */
+  function makeUniqueName(desiredName, excludeUserId = null) {
+    let base = (desiredName || 'Khán giả').trim().slice(0, 20);
+    if (!isNameTaken(base, excludeUserId)) {
+      return base;
+    }
+    const root = base.replace(/\s*[#(]\d+[)]?$/i, '').trim() || 'Khán giả';
+    let counter = 2;
+    while (isNameTaken(`${root} #${counter}`, excludeUserId)) {
+      counter++;
+    }
+    return `${root} #${counter}`;
   }
 
   /**
@@ -1986,8 +2024,12 @@
     }
   }
 
+  let lastAmbilightPair = '';
   function updateAmbilightColors(colors) {
     const [c1, c2] = colors || ['#3B82F6', '#8B5CF6'];
+    const key = `${c1}-${c2}`;
+    if (lastAmbilightPair === key) return;
+    lastAmbilightPair = key;
     document.documentElement.style.setProperty('--ambilight-1', c1);
     document.documentElement.style.setProperty('--ambilight-2', c2);
   }
@@ -2576,36 +2618,37 @@
         let cls = 'seat-cell-2d';
         if (isVip) cls += ' vip';
         if (occ) {
-          cls += ' occupied';
-          if (occ.isMe) cls += ' mine';
+          if (occ.isMe) {
+            cls += ' mine';
+          } else {
+            cls += ' occupied';
+          }
         }
 
         const titleText = occ
-          ? (occ.isMe ? `Ghế ${code} - Ghế của bạn (${occ.name})` : `Ghế ${code} - Đã có bạn "${occ.name}" ngồi (Không thể chọn)`)
-          : `Ghế ${code} (Trống - Nhấp để ngồi)`;
+          ? (occ.isMe ? `Ghế ${code} - Chỗ ngồi hiện tại của bạn (${occ.name})` : `Ghế ${code} - Đã có bạn "${occ.name}" ngồi (Không thể chọn)`)
+          : `Ghế ${code} (Trống - Bấm để đổi sang ghế này)`;
 
         let cellContent = code;
         if (occ) {
-          cellContent = `<span class="seat-2d-occ-name" title="${escapeHtml(occ.name)}">${escapeHtml(occ.name.slice(0, 4))}${occ.isMe ? '★' : ''}</span>`;
+          if (occ.isMe) {
+            cellContent = `<span class="seat-2d-mine-badge">BẠN</span>`;
+          } else {
+            cellContent = `<span class="seat-2d-occ-name" title="${escapeHtml(occ.name)}">${escapeHtml(occ.name.slice(0, 4))}</span>`;
+          }
         }
         cellsHtml += `<div class="${cls}" data-seat-2d="${code}" title="${escapeHtml(titleText)}">${cellContent}</div>`;
       });
     });
     grid.innerHTML = cellsHtml;
 
-    grid.querySelectorAll('[data-seat-2d]').forEach((cell) => {
-      cell.addEventListener('click', () => {
-        selectSeat(cell.dataset.seat2d);
-      });
-    });
-
     const people = Object.values(occupants);
     roster.innerHTML = people
       .map(
         (p) => `
-        <div class="roster-row">
+        <div class="roster-row" data-roster-seat="${p.seat}">
           <div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:1.05rem;">${p.emoji}</span>
+            <span style="font-size:1.05rem;">${p.emoji || '😎'}</span>
             <strong>${escapeHtml(p.name)}</strong>
             ${p.isMe ? '<span style="font-size:0.66rem;color:#FBBF24;font-weight:700;">(Bạn)</span>' : ''}
           </div>
@@ -2614,13 +2657,6 @@
       `
       )
       .join('');
-
-    // Bind click events on Audience Roster jump seat buttons
-    roster.querySelectorAll('[data-jump-seat]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        focusOnSeat(btn.dataset.jumpSeat);
-      });
-    });
   }
 
   // =========================================================================
@@ -2702,6 +2738,17 @@
               broadcastSync({ type: 'SEAT_CHANGE', seat: freeSeat, user: state.me });
             }
 
+            // Ensure our own name is independent and unique
+            if (isNameTaken(state.me.name, state.me.id)) {
+              const uniqueName = makeUniqueName(state.me.name, state.me.id);
+              state.me.name = uniqueName;
+              saveProfileToStorage();
+              const myNavName = document.getElementById('myNavName');
+              if (myNavName) myNavName.textContent = uniqueName;
+              showToast(`✨ Tên bạn đã đổi thành "${uniqueName}" để không trùng lặp.`);
+              broadcastSync({ type: 'PROFILE_UPDATE', user: state.me });
+            }
+
             refreshSeatsVisuals();
             updateSkipVoteUI();
           }
@@ -2758,6 +2805,12 @@
           const seatPill = document.getElementById('myNavSeat');
           if (seatPill) seatPill.textContent = data.assignedSeat;
         }
+        if (data.assignedName && data.assignedName !== state.me.name) {
+          state.me.name = data.assignedName;
+          saveProfileToStorage();
+          const myNavName = document.getElementById('myNavName');
+          if (myNavName) myNavName.textContent = data.assignedName;
+        }
         if (data.occupants) {
           state.peers = {};
           const now = Date.now();
@@ -2767,6 +2820,18 @@
               peerLastSeen[occ.id] = now;
             }
           });
+
+          // Ensure our own name is independent and unique
+          if (isNameTaken(state.me.name, state.me.id)) {
+            const uniqueName = makeUniqueName(state.me.name, state.me.id);
+            state.me.name = uniqueName;
+            saveProfileToStorage();
+            const myNavName = document.getElementById('myNavName');
+            if (myNavName) myNavName.textContent = uniqueName;
+            showToast(`✨ Tên bạn đã đổi thành "${uniqueName}" để không trùng lặp.`);
+            broadcastSync({ type: 'PROFILE_UPDATE', user: state.me });
+          }
+
           refreshSeatsVisuals();
         }
         if (Array.isArray(data.queue)) {
@@ -2797,6 +2862,9 @@
       case 'PEER_JOIN':
       case 'INIT_USER':
         if (data.user && data.user.id && data.user.id !== state.me.id) {
+          if (isNameTaken(data.user.name, data.user.id)) {
+            data.user.name = makeUniqueName(data.user.name, data.user.id);
+          }
           state.peers[data.user.id] = data.user;
           peerLastSeen[data.user.id] = Date.now();
           refreshSeatsVisuals();
@@ -3246,6 +3314,37 @@
           render2DSeatMap(getOccupantMap());
         }
       });
+    });
+
+    // Delegated click on 2D 100-Seat Grid (Fast, responsive, zero listener churn)
+    const seatGrid2D = document.getElementById('seatGrid2D');
+    if (seatGrid2D) {
+      seatGrid2D.addEventListener('click', (e) => {
+        const cell = e.target.closest('[data-seat-2d]');
+        if (!cell) return;
+        const targetSeat = cell.dataset.seat2d;
+        if (targetSeat) {
+          if (targetSeat === state.me.seat) {
+            showToast(`💺 Bạn đang ngồi ở ghế ${targetSeat} rồi!`);
+            return;
+          }
+          selectSeat(targetSeat);
+        }
+      });
+    }
+
+    // Sidebar quick random seat button
+    document.getElementById('btnSidebarRandomSeat')?.addEventListener('click', () => {
+      const free = findRandomFreeSeat(state.me.seat);
+      selectSeat(free);
+    });
+
+    // Jump to / highlight viewer's seat on roster click
+    document.getElementById('audienceRosterContainer')?.addEventListener('click', (e) => {
+      const jumpBtn = e.target.closest('[data-jump-seat]');
+      if (jumpBtn) {
+        focusOnSeat(jumpBtn.dataset.jumpSeat);
+      }
     });
 
     // Add YouTube Video Form
@@ -3852,9 +3951,19 @@
       });
     });
 
-    // Real-time name input preview
+    // Real-time name input preview & uniqueness validator
     document.getElementById('inputProfileName')?.addEventListener('input', (e) => {
-      state.me.name = e.target.value.trim() || 'Khán giả';
+      const val = e.target.value.trim() || 'Khán giả';
+      state.me.name = val;
+      const warnEl = document.getElementById('nameDuplicateWarning');
+      if (warnEl) {
+        const taken = isNameTaken(val, state.me.id);
+        warnEl.style.display = taken ? 'block' : 'none';
+        if (taken) {
+          const suggested = makeUniqueName(val, state.me.id);
+          warnEl.innerHTML = `⚠️ Tên "${escapeHtml(val)}" đã có người trong rạp dùng (sẽ tự đặt là <strong>"${escapeHtml(suggested)}"</strong> để độc lập)`;
+        }
+      }
       updateProfilePreview();
     });
 
@@ -3877,6 +3986,8 @@
         if (typeof input.focus === 'function') input.focus();
         if (typeof input.select === 'function') input.select();
       }
+      const warnEl = document.getElementById('nameDuplicateWarning');
+      if (warnEl) warnEl.style.display = 'none';
       updateProfilePreview();
     };
 
@@ -3897,7 +4008,12 @@
     document.getElementById('btnRandomEmptySeat')?.addEventListener('click', () => {
       const nameInput = document.getElementById('inputProfileName');
       if (nameInput && nameInput.value.trim()) {
-        state.me.name = nameInput.value.trim();
+        let n = nameInput.value.trim();
+        if (isNameTaken(n, state.me.id)) {
+          n = makeUniqueName(n, state.me.id);
+          nameInput.value = n;
+        }
+        state.me.name = n;
       }
       const pick = findRandomFreeSeat(state.me.seat);
       selectSeat(pick);
@@ -3908,9 +4024,14 @@
     document.getElementById('formSaveProfile')?.addEventListener('submit', (e) => {
       e.preventDefault();
       const nameInput = document.getElementById('inputProfileName');
-      if (nameInput && nameInput.value.trim()) {
-        state.me.name = nameInput.value.trim();
+      let enteredName = (nameInput && nameInput.value.trim()) || 'Khán giả';
+      if (isNameTaken(enteredName, state.me.id)) {
+        const unique = makeUniqueName(enteredName, state.me.id);
+        showToast(`⚠️ Tên "${enteredName}" đã có người đặt trong rạp! Hệ thống tự động đặt tên bạn là "${unique}" để đảm bảo độc lập.`);
+        enteredName = unique;
+        if (nameInput) nameInput.value = unique;
       }
+      state.me.name = enteredName;
       state.me.hasConfigured = true;
       saveProfileToStorage();
       refreshSeatsVisuals();
@@ -4103,22 +4224,40 @@
     return `${mins}:${padSec}`;
   }
 
+  let lastFormattedCur = '';
+  let lastFormattedTot = '';
+  let lastPlayedPct = -1;
+
   function updateScrubberUI(currentSec, totalSec, bufferFraction = 0) {
     const playedBar = document.getElementById('ytScrubberPlayed');
     const bufferBar = document.getElementById('ytScrubberBuffer');
     const curTimeEl = document.getElementById('screenCurrentTime');
     const totTimeEl = document.getElementById('screenTotalDuration');
 
-    if (curTimeEl) curTimeEl.textContent = formatTime(currentSec);
-    if (totTimeEl && totalSec > 0) totTimeEl.textContent = formatTime(totalSec);
+    const curStr = formatTime(currentSec);
+    if (curTimeEl && curStr !== lastFormattedCur) {
+      curTimeEl.textContent = curStr;
+      lastFormattedCur = curStr;
+    }
 
-    if (totalSec > 0) {
+    if (totTimeEl && totalSec > 0) {
+      const totStr = formatTime(totalSec);
+      if (totStr !== lastFormattedTot) {
+        totTimeEl.textContent = totStr;
+        lastFormattedTot = totStr;
+      }
+    }
+
+    if (totalSec > 0 && playedBar) {
       const pct = Math.min(100, Math.max(0, (currentSec / totalSec) * 100));
-      if (playedBar) playedBar.style.width = `${pct}%`;
+      if (Math.abs(pct - lastPlayedPct) >= 0.1) {
+        playedBar.style.width = `${pct.toFixed(2)}%`;
+        lastPlayedPct = pct;
+      }
     }
     if (bufferBar && bufferFraction > 0) {
       const bufPct = Math.min(100, Math.max(0, bufferFraction * 100));
-      bufferBar.style.width = `${bufPct}%`;
+      bufferBar.style.width = `${bufPct.toFixed(1)}%`;
     }
   }
 
