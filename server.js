@@ -159,11 +159,19 @@ function advanceRoomQueue(reasonText) {
   roomState.queue.sort((a, b) => b.votes - a.votes);
   if (roomState.queue.length === 0) {
     roomState.skipVotes.clear();
+    roomState.currentVideo = null;
     broadcast({
       type: 'SKIP_VOTE_UPDATE',
       votes: [],
       required: getRequiredSkipVotesServer(),
       isEmpty: true
+    });
+    broadcast({
+      type: 'QUEUE_ADVANCE',
+      currentVideo: null,
+      nextVideo: null,
+      queue: [],
+      reason: reasonText || 'Hàng đợi đã hết bài hát'
     });
     return;
   }
@@ -722,6 +730,19 @@ function handleClientMessage(ws, data) {
           currentVideo: roomState.currentVideo,
           queue: roomState.queue,
           reason: data.reason
+        }, ws);
+      } else if (data.nextVideo === null || (Array.isArray(data.queue) && data.queue.length === 0)) {
+        roomState.currentVideo = null;
+        if (Array.isArray(data.queue)) {
+          roomState.queue = data.queue;
+        }
+        roomState.skipVotes.clear();
+        broadcast({
+          type: 'QUEUE_ADVANCE',
+          currentVideo: null,
+          nextVideo: null,
+          queue: roomState.queue,
+          reason: data.reason || 'Hàng đợi đã hết bài hát'
         }, ws);
       }
       break;

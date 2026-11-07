@@ -173,6 +173,25 @@
   const randomSuffix = Math.floor(100 + Math.random() * 900);
   const defaultEmoji = AVATAR_EMOJIS[Math.floor(Math.random() * AVATAR_EMOJIS.length)];
   const defaultColor = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
+  const currentRoomCode = urlParams.get('room') || 'rap-chung-minh';
+
+  function getLiveRoomStorageKey(room) {
+    return 'hanzu_live_room_' + encodeURIComponent(room || 'rap-chung-minh');
+  }
+
+  function loadLiveQueueFromStorage(room) {
+    try {
+      const raw = localStorage.getItem(getLiveRoomStorageKey(room));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.queue) && Date.now() - (parsed.timestamp || 0) < 12 * 3600 * 1000) {
+        return parsed;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  const cachedLiveRoom = loadLiveQueueFromStorage(currentRoomCode);
 
   const state = {
     clientId,
@@ -209,13 +228,15 @@
     rafPending: false,
 
     // Current Video & YouTube Player State
-    currentVideo: {
-      videoId: '9B0yX0UIN9M',
-      title: 'I Really Want to Stay at Your House',
-      channel: 'Samuel Kim, Lorien - Topic',
-      startedBy: 'Hanzu Cinema',
-      ambilight: ['#38BDF8', '#EC4899']
-    },
+    currentVideo: (cachedLiveRoom && cachedLiveRoom.currentVideo !== undefined)
+      ? cachedLiveRoom.currentVideo
+      : {
+          videoId: '9B0yX0UIN9M',
+          title: 'I Really Want to Stay at Your House',
+          channel: 'Samuel Kim, Lorien - Topic',
+          startedBy: 'Hanzu Cinema',
+          ambilight: ['#38BDF8', '#EC4899']
+        },
     isPlaying: false,
     isMuted: false,
     volume: 25,
@@ -230,8 +251,8 @@
     preAdVolume: 25,
     preAdRate: 1,
 
-    // Voting Queue & History
-    queue: [...INITIAL_QUEUE],
+    // Voting Queue & History (Syncs with live queue)
+    queue: (cachedLiveRoom && Array.isArray(cachedLiveRoom.queue)) ? cachedLiveRoom.queue : [...INITIAL_QUEUE],
     history: [],
 
     // Active Speech Bubbles on 3D Seats: { [seatCode]: { text, timer } }
@@ -2430,6 +2451,7 @@
 
     state.localVotedSongIds.add(newItem.id);
     state.queue.push(newItem);
+    saveLiveQueueToStorage();
     renderQueue();
     showToast(`✅ Đã thêm "${title}" vào danh sách bình chọn!`);
     showSeatSpeechBubble(state.me.seat, `Vừa đề xuất bài mới, vote nha! 🎵`, 4200);
@@ -2466,6 +2488,7 @@
     picked.startedByClientId = state.clientId;
     state.skipVotes.clear();
     renderQueue();
+    saveLiveQueueToStorage();
     updateSkipVoteUI();
     broadcastSync({
       type: 'QUEUE_ADVANCE',
@@ -2483,11 +2506,21 @@
       state.skipVotes.clear();
       updateSkipVoteUI();
       clearCinemaScreen();
+      renderQueue();
+      saveLiveQueueToStorage();
+      broadcastSync({
+        type: 'QUEUE_ADVANCE',
+        nextVideo: null,
+        currentVideo: null,
+        queue: [],
+        reason: 'Hàng đợi đã hết bài hát'
+      });
       return;
     }
     const nextVideo = state.queue.shift();
     state.skipVotes.clear();
     renderQueue();
+    saveLiveQueueToStorage();
     updateSkipVoteUI();
 
     if (reasonText) {
@@ -2497,6 +2530,7 @@
     broadcastSync({
       type: 'QUEUE_ADVANCE',
       nextVideo: nextVideo,
+      currentVideo: nextVideo,
       queue: state.queue,
       reason: reasonText
     });
@@ -2847,6 +2881,22 @@
     if (data.userId && data.userId === state.me.id && data.type !== 'ROOM_SYNC') return;
 
     switch (data.type) {
+      case 'REQUEST_ROOM_SYNC':
+        if (data.from !== state.clientId && data.clientId !== state.clientId) {
+          broadcastSync({
+            from: state.clientId,
+            type: 'ROOM_SYNC_REPLY',
+            targetClientId: data.from || data.clientId,
+            occupants: getOccupantMap(),
+            currentVideo: state.currentVideo,
+            currentTime: (ytReady && ytPlayer && typeof ytPlayer.getCurrentTime === 'function') ? ytPlayer.getCurrentTime() : 0,
+            isPlaying: state.isPlaying,
+            queue: state.queue || [],
+            skipVotes: Array.from(state.skipVotes)
+          });
+        }
+        break;
+
       case 'ROOM_SYNC_REPLY':
         if (!data.targetClientId || data.targetClientId === state.clientId) {
           if (data.occupants) {
@@ -2881,8 +2931,18 @@
             }
 
             refreshSeatsVisuals();
+            render2DSeatMap(getOccupantMap());
             updateSkipVoteUI();
           }
+
+          // CRITICAL: Always synchronize live queue, even if empty ([])
+          if (Array.isArray(data.queue)) {
+            state.queue = data.queue;
+            saveLiveQueueToStorage();
+            renderQueue();
+            updateSkipVoteUI();
+          }
+
           if (data.currentVideo && data.currentVideo.videoId) {
             const seekTime = (typeof data.currentTime === 'number' && data.currentTime > 0) ? data.currentTime : 0;
             if (!state.currentVideo || state.currentVideo.videoId !== data.currentVideo.videoId) {
@@ -2896,12 +2956,11 @@
                 pendingVideoToLoad = { ...data.currentVideo, startSeconds: seekTime };
               }
             }
+          } else if (data.currentVideo === null || (Array.isArray(data.queue) && data.queue.length === 0 && !data.isPlaying)) {
+            clearCinemaScreen();
+            saveLiveQueueToStorage();
           }
-          if (Array.isArray(data.queue) && data.queue.length > 0) {
-            state.queue = data.queue;
-            renderQueue();
-            updateSkipVoteUI();
-          }
+
           if (Array.isArray(data.skipVotes)) {
             state.skipVotes = new Set(data.skipVotes);
             updateSkipVoteUI();
@@ -3003,24 +3062,18 @@
           showSeatSpeechBubble(data.user.seat, `👋 Chào cả rạp, mình vừa vào ngồi ghế ${data.user.seat}!`, 4200);
           showToast(`👋 Khán giả "${data.user.name}" vừa vào rạp (Ghế ${data.user.seat})!`);
 
-          // If connected via Cloud Broker, reply with full room state so new peer syncs immediately!
-          if (mqttConnected && mqttClient) {
-            try {
-              const reply = new window.Paho.MQTT.Message(JSON.stringify({
-                from: state.clientId,
-                type: 'ROOM_SYNC_REPLY',
-                targetClientId: data.from || data.clientId,
-                occupants: getOccupantMap(),
-                currentVideo: state.currentVideo,
-                currentTime: (ytReady && ytPlayer && typeof ytPlayer.getCurrentTime === 'function') ? ytPlayer.getCurrentTime() : 0,
-                isPlaying: state.isPlaying,
-                queue: state.queue,
-                skipVotes: Array.from(state.skipVotes)
-              }));
-              reply.destinationName = CLOUD_ROOM_TOPIC;
-              mqttClient.send(reply);
-            } catch (err) {}
-          }
+          // Reply with live room state across all networks so new peer syncs immediately!
+          broadcastSync({
+            from: state.clientId,
+            type: 'ROOM_SYNC_REPLY',
+            targetClientId: data.from || data.clientId,
+            occupants: getOccupantMap(),
+            currentVideo: state.currentVideo,
+            currentTime: (ytReady && ytPlayer && typeof ytPlayer.getCurrentTime === 'function') ? ytPlayer.getCurrentTime() : 0,
+            isPlaying: state.isPlaying,
+            queue: state.queue || [],
+            skipVotes: Array.from(state.skipVotes)
+          });
         }
         break;
 
@@ -3101,6 +3154,7 @@
         if (Array.isArray(data.queue)) {
           state.queue = data.queue;
           renderQueue();
+          saveLiveQueueToStorage();
         }
         state.skipVotes.clear();
         updateSkipVoteUI();
@@ -3110,6 +3164,12 @@
             showToast(`⏭️ ${data.reason} • Đang phát: ${vid.title}`);
           }
           loadAndPlayVideo(vid, false);
+        } else if (data.nextVideo === null || (Array.isArray(data.queue) && data.queue.length === 0)) {
+          clearCinemaScreen();
+          saveLiveQueueToStorage();
+          if (data.reason) {
+            showToast(`⏭️ ${data.reason}`);
+          }
         }
         break;
 
@@ -3370,10 +3430,15 @@
             updateServerStatusUI('online');
             mqttClient.subscribe(CLOUD_ROOM_TOPIC, {
               onSuccess: () => {
-                // Announce self to everyone in room
+                // Announce self & request live room state immediately
                 broadcastSync({
                   type: 'PEER_JOIN',
                   user: state.me,
+                  clientId: state.clientId
+                });
+                broadcastSync({
+                  type: 'REQUEST_ROOM_SYNC',
+                  from: state.clientId,
                   clientId: state.clientId
                 });
 
@@ -3428,7 +3493,8 @@
   function setupSyncListener() {
     // 1. Setup local BroadcastChannel for same-browser tabs
     if (syncChannel) {
-      broadcastSync({ type: 'PEER_JOIN', user: state.me });
+      broadcastSync({ type: 'PEER_JOIN', user: state.me, clientId: state.clientId });
+      broadcastSync({ type: 'REQUEST_ROOM_SYNC', from: state.clientId, clientId: state.clientId });
       syncChannel.onmessage = (event) => {
         handleIncomingSyncData(event.data);
       };
@@ -4355,6 +4421,20 @@
   function saveProfileToStorage() {
     try {
       localStorage.setItem('wetube_cine_profile', JSON.stringify(state.me));
+      localStorage.setItem('hanzu_cinema_profile', JSON.stringify(state.me));
+    } catch (e) {}
+  }
+
+  function saveLiveQueueToStorage() {
+    try {
+      localStorage.setItem(
+        getLiveRoomStorageKey(state.roomCode),
+        JSON.stringify({
+          queue: state.queue || [],
+          currentVideo: state.currentVideo || null,
+          timestamp: Date.now()
+        })
+      );
     } catch (e) {}
   }
 
