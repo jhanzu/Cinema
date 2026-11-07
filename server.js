@@ -184,6 +184,7 @@ function advanceRoomQueue(reasonText) {
   broadcast({
     type: 'QUEUE_ADVANCE',
     currentVideo: roomState.currentVideo,
+    nextVideo: roomState.currentVideo,
     queue: roomState.queue,
     reason: reasonText
   });
@@ -589,10 +590,14 @@ function handleClientMessage(ws, data) {
           addedByUserId: data.item.addedByUserId || ws.userId || null,
           addedByClientId: data.item.addedByClientId || null
         });
-        broadcast({
-          type: 'QUEUE_UPDATE',
-          queue: roomState.queue
-        });
+        if (!roomState.currentVideo || !roomState.currentVideo.videoId) {
+          advanceRoomQueue('Chiếu ngay video vừa đề xuất');
+        } else {
+          broadcast({
+            type: 'QUEUE_UPDATE',
+            queue: roomState.queue
+          });
+        }
       }
       break;
     }

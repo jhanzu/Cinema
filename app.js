@@ -1427,7 +1427,42 @@
     ytReady = true;
     state.isPlaying = true;
     updatePlayPauseButton();
-    updateAmbilightColors(state.currentVideo.ambilight);
+    if (state.currentVideo && state.currentVideo.ambilight) {
+      updateAmbilightColors(state.currentVideo.ambilight);
+    }
+    try {
+      if (window.YT && typeof window.YT.Player === 'function') {
+        ytPlayer = new window.YT.Player('youtubePlayerContainer', {
+          events: {
+            onReady: (event) => {
+              ytReady = true;
+              try { event.target.setVolume(state.volume); } catch (_) {}
+            },
+            onStateChange: (event) => {
+              if (event.data === window.YT.PlayerState.PLAYING) {
+                clearTimeout(videoLoadWatchdogTimer);
+                state.isPlaying = true;
+                hideVideoRescueCard();
+                updatePlayPauseButton();
+                if (state.currentVideo && state.currentVideo.ambilight) {
+                  updateAmbilightColors(state.currentVideo.ambilight);
+                }
+              } else if (event.data === window.YT.PlayerState.ENDED) {
+                handleVideoEnd();
+              } else if (event.data === window.YT.PlayerState.PAUSED) {
+                state.isPlaying = false;
+                updatePlayPauseButton();
+              }
+            },
+            onError: (event) => {
+              clearTimeout(videoLoadWatchdogTimer);
+              const errCode = event ? event.data : 150;
+              handleVideoPlayError(errCode);
+            }
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   // =========================================================================
@@ -2109,7 +2144,12 @@
       if (inPageTitle) inPageTitle.textContent = state.currentVideo.title || 'Đang chiếu';
     }
 
-    if (ytReady && ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
+    const mount = document.getElementById('ytPlayerMount');
+    const hasPlaceholder = mount && mount.querySelector('.cinema-empty-screen-placeholder');
+    const iframe = (ytPlayer && typeof ytPlayer.getIframe === 'function') ? ytPlayer.getIframe() : null;
+    const isPlayerAlive = ytReady && ytPlayer && iframe && iframe.isConnected && !hasPlaceholder;
+
+    if (isPlayerAlive && typeof ytPlayer.loadVideoById === 'function') {
       try {
         if (startSeconds > 0) {
           ytPlayer.loadVideoById({
@@ -2123,7 +2163,7 @@
       } catch (e) {
         createFallbackIframe(state.currentVideo.videoId, startSeconds);
       }
-    } else if (ytReady) {
+    } else {
       createFallbackIframe(state.currentVideo.videoId, startSeconds);
     }
 
@@ -2177,9 +2217,10 @@
     return [c1, c2];
   }
 
-  // Playback Lock Guard (Locked when 2 or more viewers are in the theater)
+  // Playback Lock Guard (Locked when 2 or more viewers are in the theater AND a video is actively playing)
   function isPlaybackLocked() {
-    return Object.keys(getOccupantMap()).length >= 2;
+    const hasActiveVideo = !!(state.currentVideo && state.currentVideo.videoId);
+    return hasActiveVideo && Object.keys(getOccupantMap()).length >= 2;
   }
 
   function notifyPlaybackLocked() {
@@ -2475,7 +2516,14 @@
     renderQueue();
     showToast(`✅ Đã thêm "${title}" vào danh sách bình chọn!`);
     showSeatSpeechBubble(state.me.seat, `Vừa đề xuất bài mới, vote nha! 🎵`, 4200);
-    broadcastSync({ type: 'ADD_QUEUE', item: newItem });
+
+    const isScreenEmpty = !state.currentVideo || !state.currentVideo.videoId;
+    if (isScreenEmpty) {
+      // Screen is currently waiting / empty: auto play newly proposed video immediately!
+      playNextFromQueue('Chiếu ngay video vừa đề xuất');
+    } else {
+      broadcastSync({ type: 'ADD_QUEUE', item: newItem });
+    }
   }
 
   function toggleVoteQueueItem(itemId) {
@@ -2979,6 +3027,9 @@
           } else if (data.currentVideo === null || (Array.isArray(data.queue) && data.queue.length === 0 && !data.isPlaying)) {
             clearCinemaScreen();
             saveLiveQueueToStorage();
+            if ((!state.currentVideo || !state.currentVideo.videoId) && state.queue.length > 0) {
+              playNextFromQueue('Tự động chiếu từ hàng đợi');
+            }
           }
 
           if (Array.isArray(data.skipVotes)) {
@@ -3167,6 +3218,9 @@
           state.queue.push({ ...data.item });
           renderQueue();
           updateSkipVoteUI();
+        }
+        if ((!state.currentVideo || !state.currentVideo.videoId) && state.queue.length > 0) {
+          playNextFromQueue('Tự động chiếu từ hàng đợi');
         }
         break;
 
@@ -3623,6 +3677,10 @@
 
     // YouTube Core Player Functions
     function togglePlayPause() {
+      if ((!state.currentVideo || !state.currentVideo.videoId) && state.queue && state.queue.length > 0) {
+        playNextFromQueue('Bắt đầu chiếu từ hàng đợi');
+        return;
+      }
       if (!ytReady || !ytPlayer) {
         showToast('⏳ Trình phát đang khởi động...');
         return;
@@ -3834,6 +3892,10 @@
     // Center Play Button (appears when paused)
     document.getElementById('screenCenterPlayBtn')?.addEventListener('click', (e) => {
       e.stopPropagation();
+      if ((!state.currentVideo || !state.currentVideo.videoId) && state.queue && state.queue.length > 0) {
+        playNextFromQueue('Bắt đầu chiếu từ hàng đợi');
+        return;
+      }
       if (isPlaybackLocked()) {
         notifyPlaybackLocked();
         return;
@@ -4586,6 +4648,11 @@
     startAutoAdSkipperEngine();
     updateAutoSkipAdsUI();
     startFpsMonitor();
+
+    // Auto start queue if cinema is idle and queue has pending songs
+    if ((!state.currentVideo || !state.currentVideo.videoId) && state.queue && state.queue.length > 0) {
+      playNextFromQueue('Bắt đầu chiếu bài trong hàng đợi');
+    }
   }
 
   if (document.readyState === 'loading') {
