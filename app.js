@@ -2726,7 +2726,7 @@
   }
 
   // 3D Reaction Particles Engine (Anti-spam rate limiting & constant 60 FPS pool cap)
-  const MAX_ACTIVE_REACTION_PARTICLES = 24;
+  const MAX_ACTIVE_REACTION_PARTICLES = 36;
   const activeReactionParticles = [];
   let lastLocalReactionBroadcastTime = 0;
 
@@ -2736,13 +2736,12 @@
 
     const now = Date.now();
 
-    // Rate-limit local broadcasts: max 1 reaction every 280ms (~3.5/sec) to protect network & server
+    // Throttle network broadcast only (protects WebSocket/MQTT while keeping local response instant)
     if (broadcast) {
-      if (now - lastLocalReactionBroadcastTime < 280) {
-        return;
+      if (now - lastLocalReactionBroadcastTime >= 180) {
+        lastLocalReactionBroadcastTime = now;
+        broadcastSync({ type: 'REACTION', seat: seatCode, emoji: emojiIcon });
       }
-      lastLocalReactionBroadcastTime = now;
-      broadcastSync({ type: 'REACTION', seat: seatCode, emoji: emojiIcon });
     }
 
     // Audio throttled pop
@@ -2750,31 +2749,35 @@
       sfx.playReactionPop();
     }
 
-    // FIFO Pool Cap: keep active DOM particles <= 24 across the theater
-    while (activeReactionParticles.length >= MAX_ACTIVE_REACTION_PARTICLES) {
-      const oldest = activeReactionParticles.shift();
-      if (oldest && oldest.isConnected) {
-        oldest.remove();
-      }
+    // Spawn lively burst of 2 floating emoji particles
+    for (let i = 0; i < 2; i++) {
+      setTimeout(() => {
+        // Enforce FIFO cap so total DOM particles never exceed MAX_ACTIVE_REACTION_PARTICLES
+        while (activeReactionParticles.length >= MAX_ACTIVE_REACTION_PARTICLES) {
+          const oldest = activeReactionParticles.shift();
+          if (oldest && oldest.isConnected) {
+            oldest.remove();
+          }
+        }
+
+        const p = document.createElement('div');
+        p.className = 'reaction-particle';
+        p.textContent = emojiIcon;
+        const driftX = (Math.random() - 0.5) * 64;
+        p.style.setProperty('--drift-x', `${driftX.toFixed(1)}px`);
+        p.style.left = '50%';
+        p.style.bottom = '46px';
+
+        seatNode.appendChild(p);
+        activeReactionParticles.push(p);
+
+        setTimeout(() => {
+          const idx = activeReactionParticles.indexOf(p);
+          if (idx !== -1) activeReactionParticles.splice(idx, 1);
+          if (p.isConnected) p.remove();
+        }, 1600);
+      }, i * 90);
     }
-
-    // Spawn high-impact GPU composited particle
-    const p = document.createElement('div');
-    p.className = 'reaction-particle';
-    p.textContent = emojiIcon;
-    const driftX = (Math.random() - 0.5) * 60;
-    p.style.setProperty('--drift-x', `${driftX.toFixed(1)}px`);
-    p.style.left = '50%';
-    p.style.bottom = '46px';
-
-    seatNode.appendChild(p);
-    activeReactionParticles.push(p);
-
-    setTimeout(() => {
-      const idx = activeReactionParticles.indexOf(p);
-      if (idx !== -1) activeReactionParticles.splice(idx, 1);
-      if (p.isConnected) p.remove();
-    }, 1400);
   }
 
   function sendChatMessage(rawText) {
