@@ -419,10 +419,15 @@ function handleClientMessage(ws, data) {
       connectedClients.set(ws, { id: ws.id, user: roomState.occupants[user.id], socket: ws.socket });
 
       // 1. Reply to connecting user with Full Room State
+      let elapsedSec = 0;
+      if (roomState.currentVideo && roomState.currentVideo.startTime) {
+        elapsedSec = Math.max(0, Math.floor((Date.now() - roomState.currentVideo.startTime) / 1000));
+      }
       ws.send({
         type: 'ROOM_SYNC',
         assignedSeat: finalSeat,
         currentVideo: roomState.currentVideo,
+        currentTime: elapsedSec,
         queue: roomState.queue,
         occupants: roomState.occupants,
         skipVotes: Array.from(roomState.skipVotes),
@@ -618,10 +623,55 @@ function handleClientMessage(ws, data) {
       break;
     }
 
+    case 'LOAD_VIDEO': {
+      if (!data.video || !data.video.videoId) return;
+      roomState.currentVideo = {
+        videoId: data.video.videoId,
+        title: data.video.title,
+        channel: data.video.channel || 'YouTube Cinema',
+        startedBy: data.video.startedBy || (ws.userId && roomState.occupants[ws.userId]?.name) || 'Khán giả',
+        ambilight: data.video.ambilight || ['#3B82F6', '#8B5CF6'],
+        isPlaying: true,
+        startTime: Date.now() - (data.currentTime ? data.currentTime * 1000 : 0)
+      };
+      roomState.skipVotes.clear();
+      broadcast({
+        type: 'LOAD_VIDEO',
+        video: roomState.currentVideo,
+        currentTime: data.currentTime || 0
+      }, ws);
+      break;
+    }
+
+    case 'QUEUE_ADVANCE': {
+      if (data.nextVideo && data.nextVideo.videoId) {
+        roomState.currentVideo = {
+          videoId: data.nextVideo.videoId,
+          title: data.nextVideo.title,
+          channel: data.nextVideo.channel || 'YouTube Cinema',
+          startedBy: data.nextVideo.addedBy || 'Khán giả',
+          ambilight: data.nextVideo.ambilight || ['#3B82F6', '#8B5CF6'],
+          isPlaying: true,
+          startTime: Date.now()
+        };
+        if (Array.isArray(data.queue)) {
+          roomState.queue = data.queue;
+        }
+        roomState.skipVotes.clear();
+        broadcast({
+          type: 'QUEUE_ADVANCE',
+          currentVideo: roomState.currentVideo,
+          queue: roomState.queue,
+          reason: data.reason
+        }, ws);
+      }
+      break;
+    }
+
     case 'SYNC_PLAY_PAUSE': {
       const totalOccupants = Object.keys(roomState.occupants).length;
-      if (!data.isPlaying && totalOccupants >= 2) {
-        // Disallow pause if 2 or more people in theater
+      if (totalOccupants >= 2) {
+        // Strictly disallow pause when 2 or more people in theater
         return;
       }
       roomState.currentVideo.isPlaying = !!data.isPlaying;
@@ -634,6 +684,14 @@ function handleClientMessage(ws, data) {
     }
 
     case 'SYNC_SEEK': {
+      const totalOccupants = Object.keys(roomState.occupants).length;
+      if (totalOccupants >= 2) {
+        // Strictly disallow seek/rewind when 2 or more people in theater
+        return;
+      }
+      if (roomState.currentVideo && typeof data.time === 'number') {
+        roomState.currentVideo.startTime = Date.now() - (data.time * 1000);
+      }
       broadcast({
         type: 'SYNC_SEEK',
         time: data.time,
