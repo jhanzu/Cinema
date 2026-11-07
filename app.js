@@ -322,11 +322,16 @@
               <span id="serverStatusText">Đang kết nối...</span>
             </button>
 
-            <button class="my-seat-pill" id="btnOpenProfile" title="Đổi tên, giới tính hoặc chọn ghế ngồi">
+            <button class="my-seat-pill" id="btnOpenProfile" title="Bấm để đổi tên, hình đại diện hoặc chọn ghế">
               <span id="myNavGender">${state.me.gender === 'female' ? '👩' : (state.me.gender === 'other' ? '✨' : '👨')}</span>
               <span id="myNavEmoji">${state.me.emoji}</span>
               <span id="myNavName">${escapeHtml(state.me.name)}</span>
               <span>• Ghế <strong id="myNavSeat">${state.me.seat}</strong></span>
+              <span style="opacity:0.75;font-size:0.75rem;margin-left:3px;">✏️</span>
+            </button>
+
+            <button class="icon-btn" id="btnOpenSettings" title="Cài đặt & Đổi tên khán giả">
+              ⚙️ Đổi tên
             </button>
 
             <button class="icon-btn" id="btnToggleLights" title="Tắt/Bật đèn rạp (Phím tắt: L)">
@@ -570,8 +575,11 @@
             <section class="sidebar-panel" id="panel-seats">
               <div class="seatmap-panel-body">
                 <div class="seatmap-action-hint">
-                  <span>👆 <strong>Bấm vào ô ghế trống</strong> để đổi chỗ ngồi ngay lập tức</span>
-                  <button class="btn-quick-switch" id="btnSidebarRandomSeat" type="button" title="Đổi sang một ghế trống ngẫu nhiên">🎲 Đổi ngẫu nhiên</button>
+                  <span>👆 <strong>Bấm vào ô ghế trống</strong> để đổi chỗ ngồi</span>
+                  <div style="display:flex;gap:6px;align-items:center;">
+                    <button class="btn-quick-switch" id="btnSidebarChangeName" type="button" title="Cài đặt & Đổi tên của bạn">⚙️ Đổi tên</button>
+                    <button class="btn-quick-switch" id="btnSidebarRandomSeat" type="button" title="Đổi sang một ghế trống ngẫu nhiên">🎲 Đổi ngẫu nhiên</button>
+                  </div>
                 </div>
                 <div class="mini-screen-indicator">MÀN CHIẾU CHÍNH (SÂN KHẤU)</div>
                 <div class="seat-grid-2d" id="seatGrid2D"></div>
@@ -593,7 +601,7 @@
         <div class="modal-backdrop" id="profileModal">
           <div class="modal-card" style="max-width: 480px;">
             <div class="modal-header">
-              <div class="modal-title" id="profileModalTitle">✨ Hồ sơ khán giả & Chỗ ngồi</div>
+              <div class="modal-title" id="profileModalTitle">⚙️ Cài đặt & Đổi tên khán giả</div>
               <button class="icon-btn" id="btnCloseProfile" type="button" title="Đóng">✕</button>
             </div>
 
@@ -610,7 +618,7 @@
             </div>
 
             <form id="formSaveProfile">
-              <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:6px;">1. Tên hiển thị trên ghế 3D (Độc lập, không trùng lặp)</label>
+              <label style="font-size:0.82rem;font-weight:700;color:#F3F4F6;display:block;margin-bottom:6px;">✏️ 1. Tên hiển thị của bạn (Độc lập, không trùng lặp)</label>
               <input type="text" class="text-input" id="inputProfileName" style="width:100%;margin-bottom:8px;" value="${escapeHtml(state.me.name)}" maxlength="20" placeholder="Nhập tên hoặc nickname..." required />
               <div id="nameDuplicateWarning" style="display:none;color:#FBBF24;font-size:0.72rem;margin-top:-4px;margin-bottom:10px;font-weight:700;"></div>
 
@@ -638,7 +646,7 @@
 
               <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
                 <button type="button" class="icon-btn" id="btnRandomEmptySeat">🎲 Ghế VIP ngẫu nhiên</button>
-                <button type="submit" class="btn-submit" id="btnSubmitProfile" style="padding:10px 22px;font-size:0.92rem;">🎬 Vào Rạp Xem Phim</button>
+                <button type="submit" class="btn-submit" id="btnSubmitProfile" style="padding:10px 22px;font-size:0.92rem;">💾 Lưu tên & Cài đặt</button>
               </div>
             </form>
           </div>
@@ -4204,8 +4212,8 @@
           title.textContent = '✨ Chào mừng đến với Hanzu Cinema';
           submitBtn.textContent = '🎬 Vào Rạp Chiếu Phim';
         } else {
-          title.textContent = '✨ Hồ sơ khán giả & Chỗ ngồi';
-          submitBtn.textContent = 'Lưu thay đổi';
+          title.textContent = '⚙️ Cài đặt & Đổi tên khán giả';
+          submitBtn.textContent = '💾 Lưu tên & Cài đặt';
         }
       }
       const input = document.getElementById('inputProfileName');
@@ -4224,6 +4232,8 @@
     };
 
     document.getElementById('btnOpenProfile')?.addEventListener('click', () => openProfile(false));
+    document.getElementById('btnOpenSettings')?.addEventListener('click', () => openProfile(false));
+    document.getElementById('btnSidebarChangeName')?.addEventListener('click', () => openProfile(false));
     document.getElementById('btnCloseProfile')?.addEventListener('click', closeProfile);
 
     // Close modal on click outside
@@ -4265,7 +4275,7 @@
       refreshSeatsVisuals();
       closeProfile();
       sfx.playSeat();
-      showToast(`🎉 Chào mừng ${state.me.name} (${state.me.gender === 'female' ? 'Nữ 👩' : (state.me.gender === 'other' ? '✨' : 'Nam 👨')}) vào rạp Hanzu Cinema!`);
+      showToast(`✅ Đã đổi tên thành "${state.me.name}" thành công!`);
       broadcastSync({ type: 'SEAT_CHANGE', seat: state.me.seat, user: state.me });
       broadcastSync({ type: 'PROFILE_UPDATE', user: state.me });
     });
