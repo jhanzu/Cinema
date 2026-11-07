@@ -726,9 +726,19 @@
     const fragment = document.createDocumentFragment();
 
     ROWS.forEach((rowLetter, rIdx) => {
+      const z = rIdx * 50 + 30;
+      const isVipRow = rowLetter === 'E' || rowLetter === 'F';
+
+      // Group 10 seats of each row into a single 3D row element to optimize GPU depth-sorting & FPS
+      const rowNode = document.createElement('div');
+      rowNode.className = `seat-row-3d ${isVipRow ? 'vip-row' : ''}`;
+      rowNode.id = `seat-row-${rowLetter}`;
+      rowNode.dataset.row = rowLetter;
+      rowNode.style.transform = `translate3d(0px, 0px, ${z}px)`;
+
       COLS.forEach((colNum, cIdx) => {
         const seatCode = `${rowLetter}${colNum}`;
-        const isVip = rowLetter === 'E' || rowLetter === 'F';
+        const isVip = isVipRow;
 
         // Center aisle gap between col 5 and col 6, side aisles after col 2 and col 8
         let aisleOffset = 0;
@@ -738,7 +748,6 @@
 
         const x = cIdx * 78 + aisleOffset + 32;
         const y = 0;
-        const z = rIdx * 50 + 30;
 
         seatCoordMap[seatCode] = { x, y, z, rIdx, cIdx, rowLetter, colNum };
 
@@ -746,7 +755,7 @@
         seatNode.className = `seat-3d-node ${isVip ? 'vip-seat' : ''}`;
         seatNode.id = `seat-3d-${seatCode}`;
         seatNode.dataset.seat = seatCode;
-        seatNode.style.transform = `translate3d(${x}px, ${y}px, ${z}px)`;
+        seatNode.style.transform = `translate3d(${x}px, 0px, 0px)`;
         seatNode.title = `Ghế ${seatCode} ${isVip ? '(Hàng VIP Trung Tâm)' : ''} — Click để ngồi`;
 
         // Streamlined high-performance chair (no redundant DOM micro-elements, 60fps)
@@ -766,13 +775,15 @@
           selectSeat(seatCode);
         });
 
-        fragment.appendChild(seatNode);
+        rowNode.appendChild(seatNode);
         seatNodeCache[seatCode] = {
           node3D: seatNode,
           slot: seatNode.querySelector('.seat-avatar-slot'),
           badge: seatNode.querySelector('.chair-name-badge')
         };
       });
+
+      fragment.appendChild(rowNode);
     });
 
     container.appendChild(fragment);

@@ -975,15 +975,33 @@ body.is-dragging-camera iframe,
   -webkit-backface-visibility: hidden;
 }
 
+/* 3D Row Container: Batches 10 seats into 1 row, reducing GPU compositor plane count 10x */
+.seat-row-3d {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 920px;
+  height: 56px;
+  transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+  pointer-events: none;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
 .seat-3d-node {
   position: absolute;
+  top: 0;
+  left: 0;
   width: 54px;
   height: 56px;
   transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
   cursor: pointer;
   contain: layout style;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+  pointer-events: auto;
 }
 
 .seat-3d-node:hover {
@@ -3054,6 +3072,7 @@ body.is-dragging-camera * {
   user-select: none !important;
 }
 
+body.is-dragging-camera .seat-row-3d,
 body.is-dragging-camera .seat-3d-node,
 body.is-dragging-camera .chair-3d-model,
 body.is-dragging-camera .mannequin-nametag,
@@ -3066,6 +3085,7 @@ body.is-dragging-camera .seat-speech-bubble {
 .scene-3d-wrapper,
 .theater-world,
 .seats-auditorium-3d,
+.seat-row-3d,
 .stage-screen,
 .screen-frame {
   -webkit-backface-visibility: hidden;
