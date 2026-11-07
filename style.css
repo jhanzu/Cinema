@@ -653,9 +653,10 @@ body.is-dragging-camera iframe,
 .screen-top-quickbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 16px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.8) 0%, transparent 100%);
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.85) 0%, transparent 100%);
   opacity: 0;
   transform: translateY(-8px);
   transition: opacity 0.28s ease, transform 0.28s ease;
@@ -670,24 +671,25 @@ body.is-dragging-camera iframe,
   pointer-events: none;
 }
 
+.stq-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 0;
+  flex-shrink: 0;
+  pointer-events: auto;
+}
+
 .stq-title {
   color: #F8FAFC;
   font-size: 0.86rem;
   font-weight: 700;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95);
-  max-width: 50%;
-  pointer-events: auto;
-}
-
-.stq-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-right: 98px; /* Offset so YouTube's top-right CC and gear controls are completely uncovered */
-  pointer-events: auto;
+  max-width: 55%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  pointer-events: auto;
 }
 
 .stq-btn {
@@ -941,7 +943,7 @@ body.is-dragging-camera iframe,
 
 .screen-frame.native-yt-active .screen-top-quickbar .stq-actions {
   pointer-events: auto !important;
-  margin-right: 98px !important;
+  margin-right: 0 !important;
 }
 .screen-frame.native-yt-active #btnToggleNativeYt {
   pointer-events: auto !important;

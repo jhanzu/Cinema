@@ -416,13 +416,13 @@
                         <span>Đang tự động bỏ qua quảng cáo...</span>
                       </div>
 
-                      <!-- Top Quick Bar (Title & Mode) -->
+                      <!-- Top Quick Bar (Left Mode Actions & Title) -->
                       <div class="screen-top-quickbar">
-                        <span class="stq-title" id="screenTopTitle">${escapeHtml(state.currentVideo.title)}</span>
                         <div class="stq-actions">
                           <button class="stq-btn" id="btnToggleNativeYt" type="button" title="Chuyển đổi giữa Giao diện Rạp và Menu cài đặt gốc YouTube">⚙️ YouTube Gốc</button>
                           <button class="stq-btn" id="btnScreenFocusMode" type="button" title="Chế độ Rạp IMAX cận cảnh (Phím tắt: T)">⛶ Rạp IMAX</button>
                         </div>
+                        <span class="stq-title" id="screenTopTitle">${escapeHtml(state.currentVideo.title)}</span>
                       </div>
 
                       <!-- Center Gesture & Click Area -->
