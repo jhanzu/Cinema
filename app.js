@@ -725,71 +725,62 @@
   function build100Seats3D() {
     const container = document.getElementById('seatsAuditorium3D');
     if (!container) return;
-    container.innerHTML = '';
-    const fragment = document.createDocumentFragment();
 
+    let rowsHtml = '';
     ROWS.forEach((rowLetter, rIdx) => {
       const z = rIdx * 50 + 30;
       const isVipRow = rowLetter === 'E' || rowLetter === 'F';
-
-      // Group 10 seats of each row into a single 3D row element to optimize GPU depth-sorting & FPS
-      const rowNode = document.createElement('div');
-      rowNode.className = `seat-row-3d ${isVipRow ? 'vip-row' : ''}`;
-      rowNode.id = `seat-row-${rowLetter}`;
-      rowNode.dataset.row = rowLetter;
-      rowNode.style.transform = `translate3d(0px, 0px, ${z}px)`;
+      let seatsHtml = '';
 
       COLS.forEach((colNum, cIdx) => {
         const seatCode = `${rowLetter}${colNum}`;
-        const isVip = isVipRow;
+        let aisle = 0;
+        if (colNum > 2) aisle += 18;
+        if (colNum > 5) aisle += 38;
+        if (colNum > 8) aisle += 18;
+        const x = cIdx * 78 + aisle + 32;
 
-        // Center aisle gap between col 5 and col 6, side aisles after col 2 and col 8
-        let aisleOffset = 0;
-        if (colNum > 2) aisleOffset += 18;
-        if (colNum > 5) aisleOffset += 38;
-        if (colNum > 8) aisleOffset += 18;
+        seatCoordMap[seatCode] = { x, y: 0, z, rIdx, cIdx, rowLetter, colNum };
 
-        const x = cIdx * 78 + aisleOffset + 32;
-        const y = 0;
-
-        seatCoordMap[seatCode] = { x, y, z, rIdx, cIdx, rowLetter, colNum };
-
-        const seatNode = document.createElement('div');
-        seatNode.className = `seat-3d-node ${isVip ? 'vip-seat' : ''}`;
-        seatNode.id = `seat-3d-${seatCode}`;
-        seatNode.dataset.seat = seatCode;
-        seatNode.style.transform = `translate3d(${x}px, 0px, 0px)`;
-        seatNode.title = `Ghế ${seatCode} ${isVip ? '(Hàng VIP Trung Tâm)' : ''} — Click để ngồi`;
-
-        // Streamlined high-performance chair (no redundant DOM micro-elements, 60fps)
-        seatNode.innerHTML = `
-          <div class="chair-name-badge" id="chair-badge-${seatCode}"></div>
-          <div class="seat-avatar-slot" id="avatar-slot-${seatCode}"></div>
-          <div class="chair-3d-model">
-            <div class="chair-back"><span class="seat-code-label">${seatCode}</span></div>
+        // Ultra-streamlined chair (4 DOM elements, armrests via CSS ::before/::after, max FPS)
+        seatsHtml += `
+          <div class="seat-3d-node ${isVipRow ? 'vip-seat' : ''}" id="seat-3d-${seatCode}" data-seat="${seatCode}" style="transform:translate3d(${x}px,0,0)" title="Ghế ${seatCode}${isVipRow ? ' (VIP)' : ''} — Click để ngồi">
+            <div class="chair-name-badge" id="chair-badge-${seatCode}"></div>
+            <div class="seat-avatar-slot" id="avatar-slot-${seatCode}"></div>
+            <div class="chair-back">${seatCode}</div>
             <div class="chair-cushion"></div>
-            <div class="chair-arm left"></div>
-            <div class="chair-arm right"></div>
-          </div>
-        `;
-
-        seatNode.addEventListener('click', (e) => {
-          e.stopPropagation();
-          selectSeat(seatCode);
-        });
-
-        rowNode.appendChild(seatNode);
-        seatNodeCache[seatCode] = {
-          node3D: seatNode,
-          slot: seatNode.querySelector('.seat-avatar-slot'),
-          badge: seatNode.querySelector('.chair-name-badge')
-        };
+          </div>`;
       });
 
-      fragment.appendChild(rowNode);
+      rowsHtml += `<div class="seat-row-3d ${isVipRow ? 'vip-row' : ''}" id="seat-row-${rowLetter}" data-row="${rowLetter}" style="transform:translate3d(0,0,${z}px)">${seatsHtml}</div>`;
     });
 
-    container.appendChild(fragment);
+    container.innerHTML = rowsHtml;
+
+    // Fast cache population for differential DOM updater
+    ROWS.forEach((r) => {
+      COLS.forEach((c) => {
+        const code = `${r}${c}`;
+        const node = document.getElementById(`seat-3d-${code}`);
+        if (node) {
+          seatNodeCache[code] = {
+            node3D: node,
+            slot: node.querySelector('.seat-avatar-slot'),
+            badge: node.querySelector('.chair-name-badge')
+          };
+        }
+      });
+    });
+
+    // Single delegated click listener for all 100 seats (eliminates 100 individual event listeners)
+    container.onclick = (e) => {
+      const seatNode = e.target.closest('.seat-3d-node');
+      if (seatNode && seatNode.dataset.seat) {
+        e.stopPropagation();
+        selectSeat(seatNode.dataset.seat);
+      }
+    };
+
     refreshSeatsVisuals();
   }
 

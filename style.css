@@ -1009,16 +1009,29 @@ body.is-dragging-camera iframe,
 }
 
 /* ==========================================================================
-   Streamlined High-Performance Cinema Chair Model (Lightweight, 60 FPS)
+   Ultra-Streamlined Cinema Chair Model (Zero-DOM Armrests, 60+ FPS)
    ========================================================================== */
-.chair-3d-model {
+
+/* 1. Sleek Armrests merged into CSS ::before and ::after pseudo-elements */
+.seat-3d-node::before,
+.seat-3d-node::after,
+.chair-arm {
+  content: "";
   position: absolute;
-  inset: 0;
-  transform-style: preserve-3d;
+  bottom: 8px;
+  width: 5px;
+  height: 26px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #303330 0%, #181918 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+  box-sizing: border-box;
   pointer-events: none;
 }
+.seat-3d-node::before, .chair-arm.left { left: 0px; }
+.seat-3d-node::after, .chair-arm.right { right: 0px; }
 
-/* 1. Ergonomic Curved Cinema Backrest */
+/* 2. Ergonomic Curved Cinema Backrest (Directly holds seat code text) */
 .chair-back {
   position: absolute;
   bottom: 12px;
@@ -1034,9 +1047,6 @@ body.is-dragging-camera iframe,
   justify-content: center;
   transform: translateZ(4px);
   box-sizing: border-box;
-}
-
-.seat-code-label {
   font-size: 0.65rem;
   font-family: var(--font-mono);
   font-weight: 700;
@@ -1044,7 +1054,14 @@ body.is-dragging-camera iframe,
   letter-spacing: -0.02em;
 }
 
-/* 2. Plush Cushion Base */
+.seat-code-label {
+  font-size: inherit;
+  font-family: inherit;
+  font-weight: inherit;
+  color: inherit;
+}
+
+/* 3. Plush Cushion Base */
 .chair-cushion {
   position: absolute;
   bottom: 8px;
@@ -1060,36 +1077,21 @@ body.is-dragging-camera iframe,
   box-sizing: border-box;
 }
 
-/* 3. Sleek Armrests */
-.chair-arm {
-  position: absolute;
-  bottom: 8px;
-  width: 5px;
-  height: 26px;
-  border-radius: 3px;
-  background: linear-gradient(180deg, #303330 0%, #181918 100%);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
-  box-sizing: border-box;
-}
-.chair-arm.left { left: 0px; }
-.chair-arm.right { right: 0px; }
-
 /* VIP Rows E & F Gold Trim */
 .seat-3d-node.vip-seat .chair-back {
   border-color: rgba(245, 158, 11, 0.55);
   background: linear-gradient(180deg, #3d321d 0%, #201a0e 100%);
   box-shadow: 0 0 14px rgba(245, 158, 11, 0.28);
+  color: #FBBF24;
 }
 .seat-3d-node.vip-seat .chair-cushion {
   border-color: rgba(245, 158, 11, 0.4);
   background: linear-gradient(180deg, #382e18 0%, #20190a 100%);
 }
+.seat-3d-node.vip-seat::before,
+.seat-3d-node.vip-seat::after,
 .seat-3d-node.vip-seat .chair-arm {
   border-color: rgba(245, 158, 11, 0.45);
-}
-.seat-3d-node.vip-seat .seat-code-label {
-  color: #FBBF24;
 }
 
 /* 3D Avatar Slot positioning within each chair */
@@ -1172,6 +1174,8 @@ body.is-dragging-camera iframe,
   border-color: #F87171 !important;
 }
 
+.seat-3d-node.occupied-peer::before,
+.seat-3d-node.occupied-peer::after,
 .seat-3d-node.occupied-peer .chair-arm {
   background: linear-gradient(180deg, #EF4444 0%, #991B1B 100%) !important;
   border-color: #F87171 !important;
@@ -1210,6 +1214,8 @@ body.is-dragging-camera iframe,
   border-color: #38BDF8 !important;
 }
 
+.seat-3d-node.my-seat::before,
+.seat-3d-node.my-seat::after,
 .seat-3d-node.my-seat .chair-arm {
   background: linear-gradient(180deg, #1E40AF 0%, #0F172A 100%) !important;
   border-color: #38BDF8 !important;
