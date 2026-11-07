@@ -485,6 +485,7 @@ function handleClientMessage(ws, data) {
         gender: gender,
         seat: finalSeat,
         emoji: user.emoji || '😎',
+        avatar: user.avatar || null,
         color: user.color || '#3B82F6',
         joinedAt: Date.now()
       };
@@ -560,6 +561,7 @@ function handleClientMessage(ws, data) {
         if (data.user.gender) roomState.occupants[ws.userId].gender = data.user.gender;
         if (data.user.emoji) roomState.occupants[ws.userId].emoji = data.user.emoji;
         if (data.user.color) roomState.occupants[ws.userId].color = data.user.color;
+        if (data.user.avatar !== undefined) roomState.occupants[ws.userId].avatar = data.user.avatar;
       }
       roomState.occupants[ws.userId].seat = newSeat;
       broadcast({
@@ -578,6 +580,7 @@ function handleClientMessage(ws, data) {
       if (data.user.gender) occ.gender = (data.user.gender === 'female' || data.user.gender === 'other') ? data.user.gender : 'male';
       if (data.user.emoji) occ.emoji = data.user.emoji;
       if (data.user.color) occ.color = data.user.color;
+      if (data.user.avatar !== undefined) occ.avatar = data.user.avatar;
       broadcast({
         type: 'PROFILE_UPDATED',
         userId: ws.userId,
@@ -594,6 +597,7 @@ function handleClientMessage(ws, data) {
         author: user.name,
         seat: user.seat,
         emoji: user.emoji,
+        avatar: user.avatar || null,
         color: user.color,
         text: String(data.text || '').slice(0, 280),
         time: new Date().toTimeString().slice(0, 5),

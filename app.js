@@ -197,6 +197,7 @@
       hasConfigured: !!(savedProfile && savedProfile.hasConfigured),
       seat: urlParams.get('seat') || (savedProfile && savedProfile.seat) || 'E5',
       emoji: (savedProfile && savedProfile.emoji) || defaultEmoji,
+      avatar: (savedProfile && savedProfile.avatar) || null,
       color: (savedProfile && savedProfile.color) || defaultColor,
       isBot: false
     },
@@ -279,6 +280,54 @@
   // =========================================================================
   // 4. BUILD DOM SHELL
   // =========================================================================
+    // =========================================================================
+  // IMAGE PROCESSOR & COMPRESSION HELPER (Max 128x128px, compact data URL)
+  // =========================================================================
+  function processAvatarImageFile(file) {
+    return new Promise((resolve, reject) => {
+      if (!file || !file.type.startsWith('image/')) {
+        return reject(new Error('Vui lòng chọn file hình ảnh hợp lệ (PNG, JPG, WebP)!'));
+      }
+      if (file.size > 20 * 1024 * 1024) {
+        return reject(new Error('File ảnh quá lớn (tối đa 20MB)!'));
+      }
+
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Lỗi khi đọc file ảnh!'));
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Không thể tải hình ảnh này!'));
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            const targetSize = 128;
+            canvas.width = targetSize;
+            canvas.height = targetSize;
+            const ctx = canvas.getContext('2d');
+
+            // Center square crop
+            const minSide = Math.min(img.width, img.height);
+            const sx = (img.width - minSide) / 2;
+            const sy = (img.height - minSide) / 2;
+
+            ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, targetSize, targetSize);
+
+            // Export to WebP or JPEG
+            let dataUrl = canvas.toDataURL('image/webp', 0.85);
+            if (!dataUrl || !dataUrl.startsWith('data:image/webp')) {
+              dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            }
+            resolve(dataUrl);
+          } catch (err) {
+            reject(err);
+          }
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   function mountAppShell() {
     const root = document.getElementById('root');
     root.innerHTML = `
@@ -329,7 +378,8 @@
 
             <button class="my-seat-pill" id="btnOpenProfile" title="Bấm để đổi tên, hình đại diện hoặc chọn ghế">
               <span id="myNavGender">${state.me.gender === 'female' ? '👩' : (state.me.gender === 'other' ? '✨' : '👨')}</span>
-              <span id="myNavEmoji">${state.me.emoji}</span>
+              <img id="myNavAvatarImg" src="${state.me.avatar || ''}" style="display:${state.me.avatar ? 'inline-block' : 'none'};width:22px;height:22px;border-radius:50%;object-fit:cover;vertical-align:middle;border:1.5px solid #F59E0B;" />
+              <span id="myNavEmoji" style="display:${state.me.avatar ? 'none' : 'inline'};">${state.me.emoji}</span>
               <span id="myNavName">${escapeHtml(state.me.name)}</span>
               <span>• Ghế <strong id="myNavSeat">${state.me.seat}</strong></span>
               <span style="opacity:0.75;font-size:0.75rem;margin-left:3px;">✏️</span>
@@ -615,7 +665,8 @@
             <!-- Live Preview Card -->
             <div class="profile-preview-card" id="profilePreviewCard">
               <div class="preview-avatar-badge" id="previewBadge">
-                <span id="previewEmoji">${state.me.emoji}</span>
+                <img id="previewAvatarImg" src="${state.me.avatar || ''}" style="display:${state.me.avatar ? 'block' : 'none'};width:100%;height:100%;border-radius:50%;object-fit:cover;" />
+                <span id="previewEmoji" style="display:${state.me.avatar ? 'none' : 'block'};">${state.me.emoji}</span>
                 <span class="preview-gender-tag" id="previewGenderTag">${state.me.gender === 'female' ? '👩' : (state.me.gender === 'other' ? '✨' : '👨')}</span>
               </div>
               <div class="preview-info">
@@ -648,8 +699,30 @@
                 </button>
               </div>
 
-              <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;">3. Chọn Avatar nhân vật</label>
-              <div class="emoji-grid" id="emojiPickerGrid"></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;margin-bottom:6px;">
+                <label style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);display:block;margin:0;">3. Chọn Avatar nhân vật</label>
+                <div style="display:flex;gap:6px;">
+                  <button type="button" class="btn-upload-avatar" id="btnUploadAvatar" title="Chọn ảnh từ máy tính / điện thoại">
+                    📷 Tải ảnh từ máy
+                  </button>
+                  <button type="button" class="btn-clear-avatar" id="btnClearAvatar" style="display:${state.me.avatar ? 'inline-flex' : 'none'};" title="Xóa ảnh và dùng lại Emoji">
+                    ✕ Dùng Emoji
+                  </button>
+                  <input type="file" id="inputAvatarFile" accept="image/*" style="display:none;" />
+                </div>
+              </div>
+
+              <!-- Custom Avatar Photo Active Indicator Row -->
+              <div id="avatarCustomPhotoRow" style="display:${state.me.avatar ? 'flex' : 'none'};align-items:center;gap:12px;background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.3);border-radius:12px;padding:8px 12px;margin-bottom:10px;">
+                <img id="avatarCustomThumb" src="${state.me.avatar || ''}" style="width:42px;height:42px;border-radius:50%;object-fit:cover;border:2px solid #60A5FA;box-shadow:0 0 10px rgba(59,130,246,0.4);" />
+                <div style="flex:1;font-size:0.78rem;color:#E2E8F0;">
+                  <strong style="color:#93C5FD;">Đang dùng ảnh từ máy của bạn</strong><br>
+                  <span style="color:#94A3B8;font-size:0.72rem;">Ảnh sẽ hiển thị trên ghế 3D và chat</span>
+                </div>
+                <button type="button" class="btn-upload-avatar" id="btnChangeAvatarPhoto">Đổi ảnh khác</button>
+              </div>
+
+              <div class="emoji-grid" id="emojiPickerGrid" style="${state.me.avatar ? 'opacity:0.55;' : ''}"></div>
 
               <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
                 <button type="button" class="icon-btn" id="btnRandomEmptySeat">🎲 Ghế VIP ngẫu nhiên</button>
@@ -884,7 +957,7 @@
         const person = occupants[code];
         const bubble = state.seatBubbles[code];
 
-        const occKey = person ? `${person.id}-${person.name}-${person.emoji}-${person.color}` : 'empty';
+        const occKey = person ? `${person.id}-${person.name}-${person.emoji}-${person.color}-${person.avatar ? person.avatar.slice(0, 30) : 'none'}` : 'empty';
         const bubbleKey = bubble ? bubble.text : '';
 
         // Check if anything actually changed for this seat
@@ -903,7 +976,8 @@
             node3D.title = `Ghế ${code} của bạn (${person.name}) • Nhấp để đứng/đổi ghế`;
             if (chairBadgeEl) {
               chairBadgeEl.className = 'chair-name-badge my-badge';
-              chairBadgeEl.innerHTML = `<span style="font-size:0.74rem;">${person.emoji || '😎'}</span> <span>${escapeHtml(person.name)}</span> <span class="cnb-tag" style="color:#FDE047;font-size:0.65rem;font-weight:700;margin-left:2px;">(Bạn)</span>`;
+              const avTagMy = person.avatar ? `<img src="${person.avatar}" class="chair-badge-avatar" />` : `<span style="font-size:0.74rem;">${person.emoji || '😎'}</span>`;
+              chairBadgeEl.innerHTML = `${avTagMy} <span>${escapeHtml(person.name)}</span> <span class="cnb-tag" style="color:#FDE047;font-size:0.65rem;font-weight:700;margin-left:2px;">(Bạn)</span>`;
               chairBadgeEl.style.display = 'inline-flex';
             }
           } else {
@@ -911,7 +985,8 @@
             node3D.title = `Ghế ${code} — Đã có "${person.name}" ngồi (Không thể chọn)`;
             if (chairBadgeEl) {
               chairBadgeEl.className = 'chair-name-badge peer-badge';
-              chairBadgeEl.innerHTML = `<span style="font-size:0.74rem;">${person.emoji || '👤'}</span> <span>${escapeHtml(person.name)}</span>`;
+              const avTagPeer = person.avatar ? `<img src="${person.avatar}" class="chair-badge-avatar" />` : `<span style="font-size:0.74rem;">${person.emoji || '👤'}</span>`;
+              chairBadgeEl.innerHTML = `${avTagPeer} <span>${escapeHtml(person.name)}</span>`;
               chairBadgeEl.style.display = 'inline-flex';
             }
           }
@@ -927,13 +1002,13 @@
             <div class="block-mannequin mannequin-${gender} ${person.isMe ? 'is-me' : 'is-peer'}" style="--char-color:${person.color || '#3B82F6'}">
               <div class="mannequin-nametag">
                 <span class="mannequin-gender">${genderIcon}</span>
-                <span class="mannequin-emoji">${person.emoji || '😎'}</span>
+                ${person.avatar ? `<img src="${person.avatar}" class="mannequin-avatar-img" />` : `<span class="mannequin-emoji">${person.emoji || '😎'}</span>`}
                 <span class="mannequin-name">${escapeHtml(person.name)}</span>
               </div>
               <div class="block-head-wrap">
                 ${hairHtml}
                 <div class="block-head">
-                  <div class="block-face">${person.emoji || '😎'}</div>
+                  ${person.avatar ? `<div class="block-face block-face-photo-wrap"><img src="${person.avatar}" class="block-face-photo" /></div>` : `<div class="block-face">${person.emoji || '😎'}</div>`}
                   <div class="block-glasses-3d"></div>
                 </div>
               </div>
@@ -975,7 +1050,19 @@
     const myNavName = document.getElementById('myNavName');
     if (myNavName) myNavName.textContent = state.me.name;
     const myNavEmoji = document.getElementById('myNavEmoji');
-    if (myNavEmoji) myNavEmoji.textContent = state.me.emoji;
+    if (myNavEmoji) {
+      myNavEmoji.textContent = state.me.emoji;
+      myNavEmoji.style.display = state.me.avatar ? 'none' : 'inline';
+    }
+    const myNavAvatarImg = document.getElementById('myNavAvatarImg');
+    if (myNavAvatarImg) {
+      if (state.me.avatar) {
+        myNavAvatarImg.src = state.me.avatar;
+        myNavAvatarImg.style.display = 'inline-block';
+      } else {
+        myNavAvatarImg.style.display = 'none';
+      }
+    }
     const myNavGender = document.getElementById('myNavGender');
     if (myNavGender) myNavGender.textContent = state.me.gender === 'female' ? '👩' : (state.me.gender === 'other' ? '✨' : '👨');
     const screenSeatStatus = document.getElementById('screenSeatStatus');
@@ -3118,6 +3205,7 @@
       author: state.me.name,
       seat: state.me.seat,
       emoji: state.me.emoji,
+      avatar: state.me.avatar || null,
       color: state.me.color,
       text,
       time: getCurrentTimeStr(),
@@ -3155,7 +3243,7 @@
         }
         return `
           <div class="chat-msg ${m.isMe ? 'is-me' : ''}">
-            <div class="chat-avatar" style="background:${m.color}">${m.emoji}</div>
+            <div class="chat-avatar" style="background:${m.color}">${m.avatar ? `<img src="${m.avatar}" class="chat-avatar-img" />` : (m.emoji || '👤')}</div>
             <div class="chat-bubble-wrap">
               <div class="chat-header-line">
                 <span class="chat-author">${escapeHtml(m.author)}</span>
@@ -3241,7 +3329,7 @@
         (p) => `
         <div class="roster-row" data-roster-seat="${p.seat}">
           <div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:1.05rem;">${p.emoji || '😎'}</span>
+            ${p.avatar ? `<img src="${p.avatar}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;vertical-align:middle;border:1px solid rgba(255,255,255,0.4);" />` : `<span style="font-size:1.05rem;">${p.emoji || '😎'}</span>`}
             <strong>${escapeHtml(p.name)}</strong>
             ${p.isMe ? '<span style="font-size:0.66rem;color:#FBBF24;font-weight:700;">(Bạn)</span>' : ''}
           </div>
@@ -3410,6 +3498,7 @@
             prev.name !== data.user.name ||
             prev.gender !== data.user.gender ||
             prev.emoji !== data.user.emoji ||
+            prev.avatar !== data.user.avatar ||
             prev.color !== data.user.color;
           state.peers[data.user.id] = data.user;
           if (hasChange) {
@@ -4569,13 +4658,15 @@
     const emojiGrid = document.getElementById('emojiPickerGrid');
     if (emojiGrid) {
       emojiGrid.innerHTML = AVATAR_EMOJIS.map(
-        (em) => `<button type="button" class="emoji-choice ${em === state.me.emoji ? 'selected' : ''}" data-em="${em}">${em}</button>`
+        (em) => `<button type="button" class="emoji-choice ${em === state.me.emoji && !state.me.avatar ? 'selected' : ''}" data-em="${em}">${em}</button>`
       ).join('');
       emojiGrid.querySelectorAll('[data-em]').forEach((btn) => {
         btn.addEventListener('click', () => {
           emojiGrid.querySelectorAll('[data-em]').forEach((b) => b.classList.remove('selected'));
           btn.classList.add('selected');
           state.me.emoji = btn.dataset.em;
+          state.me.avatar = null;
+          updateProfilePreview();
         });
       });
     }
@@ -4586,11 +4677,79 @@
       const pEmoji = document.getElementById('previewEmoji');
       const pGender = document.getElementById('previewGenderTag');
       const pSeat = document.getElementById('previewSeat');
+      const pAvatarImg = document.getElementById('previewAvatarImg');
+      const customRow = document.getElementById('avatarCustomPhotoRow');
+      const customThumb = document.getElementById('avatarCustomThumb');
+      const btnClear = document.getElementById('btnClearAvatar');
+      const emojiGridEl = document.getElementById('emojiPickerGrid');
+
       if (pName) pName.textContent = state.me.name || 'Khán giả';
-      if (pEmoji) pEmoji.textContent = state.me.emoji || '😎';
       if (pGender) pGender.textContent = state.me.gender === 'female' ? '👩' : (state.me.gender === 'other' ? '✨' : '👨');
       if (pSeat) pSeat.textContent = state.me.seat || 'E5';
+
+      if (state.me.avatar) {
+        if (pAvatarImg) {
+          pAvatarImg.src = state.me.avatar;
+          pAvatarImg.style.display = 'block';
+        }
+        if (pEmoji) pEmoji.style.display = 'none';
+        if (customRow) customRow.style.display = 'flex';
+        if (customThumb) customThumb.src = state.me.avatar;
+        if (btnClear) btnClear.style.display = 'inline-flex';
+        if (emojiGridEl) {
+          emojiGridEl.style.opacity = '0.55';
+          emojiGridEl.querySelectorAll('.emoji-choice').forEach((b) => b.classList.remove('selected'));
+        }
+      } else {
+        if (pAvatarImg) pAvatarImg.style.display = 'none';
+        if (pEmoji) {
+          pEmoji.style.display = 'block';
+          pEmoji.textContent = state.me.emoji || '😎';
+        }
+        if (customRow) customRow.style.display = 'none';
+        if (btnClear) btnClear.style.display = 'none';
+        if (emojiGridEl) {
+          emojiGridEl.style.opacity = '1';
+          emojiGridEl.querySelectorAll('.emoji-choice').forEach((b) => {
+            if (b.dataset.em === state.me.emoji) b.classList.add('selected');
+          });
+        }
+      }
     };
+
+    // Avatar upload & change handling
+    const inputAvatarFile = document.getElementById('inputAvatarFile');
+    const btnUploadAvatar = document.getElementById('btnUploadAvatar');
+    const btnClearAvatar = document.getElementById('btnClearAvatar');
+    const btnChangeAvatarPhoto = document.getElementById('btnChangeAvatarPhoto');
+
+    btnUploadAvatar?.addEventListener('click', () => {
+      inputAvatarFile?.click();
+    });
+    btnChangeAvatarPhoto?.addEventListener('click', () => {
+      inputAvatarFile?.click();
+    });
+
+    inputAvatarFile?.addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      try {
+        showToast('⏳ Đang xử lý & nén ảnh avatar...');
+        const dataUrl = await processAvatarImageFile(file);
+        state.me.avatar = dataUrl;
+        updateProfilePreview();
+        showToast('✨ Đã tải ảnh đại diện từ máy thành công!');
+      } catch (err) {
+        showToast('⚠️ ' + (err.message || 'Không thể đọc file ảnh'));
+      }
+      e.target.value = '';
+    });
+
+    btnClearAvatar?.addEventListener('click', () => {
+      state.me.avatar = null;
+      updateProfilePreview();
+      showToast('😎 Đã chuyển về dùng Emoji đại diện');
+    });
 
     // Gender Card Selection
     document.querySelectorAll('#genderSelectorGrid .gender-card').forEach((btn) => {
@@ -4694,6 +4853,17 @@
       state.me.name = enteredName;
       state.me.hasConfigured = true;
       saveProfileToStorage();
+      const myNavAvatarImg = document.getElementById('myNavAvatarImg');
+      if (myNavAvatarImg) {
+        if (state.me.avatar) {
+          myNavAvatarImg.src = state.me.avatar;
+          myNavAvatarImg.style.display = 'inline-block';
+        } else {
+          myNavAvatarImg.style.display = 'none';
+        }
+      }
+      const myNavEmoji = document.getElementById('myNavEmoji');
+      if (myNavEmoji) myNavEmoji.style.display = state.me.avatar ? 'none' : 'inline';
       refreshSeatsVisuals();
       closeProfile();
       sfx.playSeat();
