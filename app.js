@@ -101,6 +101,9 @@
 
     playReactionPop() {
       if (!this.enabled) return;
+      const nowMs = Date.now();
+      if (nowMs - (this._lastReactionPopTime || 0) < 110) return;
+      this._lastReactionPopTime = nowMs;
       try {
         this.init();
         if (!this.ctx) return;
@@ -2722,31 +2725,56 @@
     refreshSeatsVisuals();
   }
 
+  // 3D Reaction Particles Engine (Anti-spam rate limiting & constant 60 FPS pool cap)
+  const MAX_ACTIVE_REACTION_PARTICLES = 24;
+  const activeReactionParticles = [];
+  let lastLocalReactionBroadcastTime = 0;
+
   function spawnSeatReaction3D(seatCode, emojiIcon, broadcast = true, playSound = true) {
     const seatNode = document.getElementById(`seat-3d-${seatCode}`);
     if (!seatNode) return;
 
-    if (playSound) {
+    const now = Date.now();
+
+    // Rate-limit local broadcasts: max 1 reaction every 280ms (~3.5/sec) to protect network & server
+    if (broadcast) {
+      if (now - lastLocalReactionBroadcastTime < 280) {
+        return;
+      }
+      lastLocalReactionBroadcastTime = now;
+      broadcastSync({ type: 'REACTION', seat: seatCode, emoji: emojiIcon });
+    }
+
+    // Audio throttled pop
+    if (playSound && sfx && typeof sfx.playReactionPop === 'function') {
       sfx.playReactionPop();
     }
 
-    for (let i = 0; i < 3; i++) {
-      setTimeout(() => {
-        const p = document.createElement('div');
-        p.className = 'reaction-particle';
-        p.textContent = emojiIcon;
-        const driftX = (Math.random() - 0.5) * 70;
-        p.style.setProperty('--drift-x', `${driftX.toFixed(1)}px`);
-        p.style.left = '50%';
-        p.style.bottom = '45px';
-        seatNode.appendChild(p);
-        setTimeout(() => p.remove(), 2200);
-      }, i * 110);
+    // FIFO Pool Cap: keep active DOM particles <= 24 across the theater
+    while (activeReactionParticles.length >= MAX_ACTIVE_REACTION_PARTICLES) {
+      const oldest = activeReactionParticles.shift();
+      if (oldest && oldest.isConnected) {
+        oldest.remove();
+      }
     }
 
-    if (broadcast) {
-      broadcastSync({ type: 'REACTION', seat: seatCode, emoji: emojiIcon });
-    }
+    // Spawn high-impact GPU composited particle
+    const p = document.createElement('div');
+    p.className = 'reaction-particle';
+    p.textContent = emojiIcon;
+    const driftX = (Math.random() - 0.5) * 60;
+    p.style.setProperty('--drift-x', `${driftX.toFixed(1)}px`);
+    p.style.left = '50%';
+    p.style.bottom = '46px';
+
+    seatNode.appendChild(p);
+    activeReactionParticles.push(p);
+
+    setTimeout(() => {
+      const idx = activeReactionParticles.indexOf(p);
+      if (idx !== -1) activeReactionParticles.splice(idx, 1);
+      if (p.isConnected) p.remove();
+    }, 1400);
   }
 
   function sendChatMessage(rawText) {
@@ -4181,39 +4209,7 @@
       showToast(`🔗 Đã sao chép link rạp kèm máy chủ chung! Gửi ngay cho bạn bè để vào cùng phòng chiếu.`, 4800);
     });
 
-    // Reaction Dock Buttons
-    document.querySelectorAll('[data-react]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        spawnSeatReaction3D(state.me.seat, btn.dataset.react, true, true);
-      });
-    });
 
-    // Toggle Cinema Lights Dimmer
-    document.getElementById('btnToggleLights')?.addEventListener('click', (e) => {
-      state.lightsDimmed = !state.lightsDimmed;
-      document.documentElement.style.setProperty('--cinema-dim', state.lightsDimmed ? '0.82' : '0.35');
-      e.currentTarget.classList.toggle('active', state.lightsDimmed);
-      showToast(state.lightsDimmed ? '🌑 Đã tắt bớt đèn rạp để tập trung xem' : '💡 Đã bật đèn rạp');
-    });
-
-    // Share Room Invite Link
-    document.getElementById('btnShareRoom')?.addEventListener('click', async () => {
-      let shareUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(state.roomCode)}`;
-      try {
-        const res = await fetch('/api/info');
-        if (res.ok) {
-          const info = await res.json();
-          if (['localhost', '127.0.0.1'].includes(window.location.hostname) && info.lanUrl) {
-            shareUrl = `${info.lanUrl}${window.location.pathname}?room=${encodeURIComponent(state.roomCode)}`;
-          }
-        }
-      } catch (e) {}
-
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(shareUrl);
-      }
-      showToast(`🔗 Đã sao chép link rạp: ${shareUrl}\nGửi link này cho bạn bè trên cùng Wi-Fi để xem chung!`, 4800);
-    });
 
     // Profile Modal
     const profileModal = document.getElementById('profileModal');
@@ -4493,6 +4489,7 @@
       } else if (e.key === 'm' || e.key === 'M') {
         document.getElementById('btnMuteToggle')?.click();
       } else if (['1', '2', '3', '4', '5', '6'].includes(e.key)) {
+        if (e.repeat) return; // Prevent key-hold repeat spam
         const emojis = ['🍿', '❤️', '🪄', '🔥', '👏', '😂'];
         spawnSeatReaction3D(state.me.seat, emojis[Number(e.key) - 1], true, true);
       }

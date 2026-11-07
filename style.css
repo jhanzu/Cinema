@@ -1477,27 +1477,34 @@ body.is-dragging-camera iframe,
 }
 
 /* ==========================================================================
-   3D Reaction Particles Floating From Seats
+   3D Reaction Particles Floating From Seats (GPU-Accelerated 60 FPS)
    ========================================================================== */
 .reaction-particle {
   position: absolute;
-  font-size: 1.5rem;
+  font-size: 1.55rem;
+  line-height: 1;
   pointer-events: none;
+  user-select: none;
   z-index: 30;
-  animation: flyUpReaction 2.2s cubic-bezier(0.2, 0.8, 0.4, 1) forwards;
+  contain: strict;
+  will-change: transform, opacity;
+  transform: translate3d(-50%, 0, 0);
+  animation: flyUpReaction 1.4s cubic-bezier(0.2, 0.8, 0.35, 1) forwards;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 @keyframes flyUpReaction {
   0% {
-    transform: translate(-50%, 0) scale(0.6) rotate(0deg);
+    transform: translate3d(-50%, 0, 0) scale(0.65) rotate(0deg);
     opacity: 1;
   }
   50% {
-    transform: translate(calc(-50% + var(--drift-x, 18px)), -95px) scale(1.25) rotate(12deg);
-    opacity: 1;
+    transform: translate3d(calc(-50% + var(--drift-x, 18px)), -75px, 0) scale(1.2) rotate(10deg);
+    opacity: 0.95;
   }
   100% {
-    transform: translate(calc(-50% + var(--drift-x, -15px)), -190px) scale(0.85) rotate(-12deg);
+    transform: translate3d(calc(-50% + var(--drift-x, -12px)), -150px, 0) scale(0.8) rotate(-10deg);
     opacity: 0;
   }
 }
@@ -1770,7 +1777,8 @@ body.is-dragging-camera iframe,
 }
 
 .react-btn:active {
-  transform: scale(0.92);
+  transform: scale(0.84);
+  filter: brightness(1.3);
 }
 
 /* ==========================================================================

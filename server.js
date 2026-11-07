@@ -33,6 +33,9 @@ const MIME_TYPES = {
 // Initial Preset Queue (Empty by default: viewers propose songs)
 const INITIAL_QUEUE = [];
 
+// Anti-spam reaction rate limiter: [userId]: [timestamp, timestamp, ...]
+const userReactionTimes = new Map();
+
 // Single Source of Truth for the Hanzu Cinema Room
 const roomState = {
   code: 'rap-chung-minh',
@@ -573,6 +576,18 @@ function handleClientMessage(ws, data) {
     case 'REACTION': {
       if (!ws.userId || !roomState.occupants[ws.userId]) return;
       const user = roomState.occupants[ws.userId];
+      const now = Date.now();
+      if (!userReactionTimes.has(ws.userId)) {
+        userReactionTimes.set(ws.userId, []);
+      }
+      const history = userReactionTimes.get(ws.userId).filter(t => now - t < 1000);
+      if (history.length >= 4) {
+        // Drop excess reactions to prevent spamming server and viewers
+        return;
+      }
+      history.push(now);
+      userReactionTimes.set(ws.userId, history);
+
       broadcast({
         type: 'REACTION',
         seat: user.seat,
