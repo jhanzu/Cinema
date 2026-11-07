@@ -2572,6 +2572,7 @@ body.is-dragging-camera iframe,
   font-weight: 800;
   color: #FEF08A;
   letter-spacing: 0.04em;
+  pointer-events: none;
 }
 
 .seat-cell-2d.occupied {
@@ -2595,6 +2596,7 @@ body.is-dragging-camera iframe,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  pointer-events: none;
 }
 
 .seat-legend {

@@ -991,6 +991,7 @@
     state.povHeadPitch = 0;
 
     refreshSeatsVisuals();
+    render2DSeatMap(getOccupantMap());
 
     if (state.cameraMode === 'pov') {
       applyCameraTransform();
@@ -2768,10 +2769,24 @@
             cellContent = `<span class="seat-2d-occ-name" title="${escapeHtml(occ.name)}">${escapeHtml(occ.name.slice(0, 4))}</span>`;
           }
         }
-        cellsHtml += `<div class="${cls}" data-seat-2d="${code}" title="${escapeHtml(titleText)}">${cellContent}</div>`;
+        cellsHtml += `<div class="${cls}" data-seat="${code}" data-seat-2d="${code}" title="${escapeHtml(titleText)}">${cellContent}</div>`;
       });
     });
     grid.innerHTML = cellsHtml;
+
+    // Direct click listeners on all 2D seat cells for immediate seat change
+    grid.querySelectorAll('.seat-cell-2d').forEach((cell) => {
+      cell.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const targetSeat = cell.getAttribute('data-seat') || cell.getAttribute('data-seat-2d');
+        if (!targetSeat) return;
+        if (targetSeat === state.me.seat) {
+          showToast(`💺 Bạn đang ngồi ở ghế ${targetSeat} rồi!`);
+          return;
+        }
+        selectSeat(targetSeat);
+      });
+    });
 
     const people = Object.values(occupants);
     roster.innerHTML = people
@@ -3481,9 +3496,9 @@
     const seatGrid2D = document.getElementById('seatGrid2D');
     if (seatGrid2D) {
       seatGrid2D.addEventListener('click', (e) => {
-        const cell = e.target.closest('[data-seat-2d]');
+        const cell = e.target.closest('.seat-cell-2d, [data-seat], [data-seat-2d]');
         if (!cell) return;
-        const targetSeat = cell.dataset.seat2d;
+        const targetSeat = cell.getAttribute('data-seat') || cell.getAttribute('data-seat-2d') || cell.dataset['seat-2d'] || cell.dataset.seat;
         if (targetSeat) {
           if (targetSeat === state.me.seat) {
             showToast(`💺 Bạn đang ngồi ở ghế ${targetSeat} rồi!`);
@@ -4469,6 +4484,7 @@
     setupAudioUnlock();
     mountAppShell();
     build100Seats3D();
+    render2DSeatMap(getOccupantMap());
     renderPresetChips();
     renderQueue();
     renderChatMessages(true);
