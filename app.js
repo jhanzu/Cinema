@@ -5006,6 +5006,8 @@
   function init() {
     setupAudioUnlock();
     mountAppShell();
+    // Ensure legacy rename button is purged if cached
+    document.getElementById('btnOpenSettings')?.remove();
     build100Seats3D();
     render2DSeatMap(getOccupantMap());
     renderPresetChips();

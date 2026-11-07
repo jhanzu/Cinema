@@ -3341,3 +3341,15 @@ body.is-dragging-camera .seat-speech-bubble {
   color: #EFF6FF !important;
   box-shadow: 0 0 14px rgba(59, 130, 246, 0.5) !important;
 }
+
+/* Permanently hide legacy btnOpenSettings if present in DOM or cached templates */
+#btnOpenSettings {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+}
