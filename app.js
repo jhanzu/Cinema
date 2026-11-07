@@ -319,11 +319,21 @@
 
             <!-- Top HUD inside Viewport -->
             <div class="viewport-hud-top">
-              <div class="now-playing-card">
-                <span class="np-badge">ĐANG CHIẾU</span>
-                <div class="np-info">
-                  <div class="np-title" id="hudVideoTitle">${escapeHtml(state.currentVideo.title)}</div>
-                  <div class="np-meta" id="hudVideoMeta">${escapeHtml(state.currentVideo.channel)} • Chọn bởi ${escapeHtml(state.currentVideo.startedBy)}</div>
+              <div class="now-playing-group">
+                <div class="now-playing-card">
+                  <span class="np-badge">ĐANG CHIẾU</span>
+                  <div class="np-info">
+                    <div class="np-title" id="hudVideoTitle">${escapeHtml(state.currentVideo.title)}</div>
+                    <div class="np-meta" id="hudVideoMeta">${escapeHtml(state.currentVideo.channel)} • Chọn bởi ${escapeHtml(state.currentVideo.startedBy)}</div>
+                  </div>
+                </div>
+
+                <div class="next-playing-card is-empty" id="hudNextPlayingCard" title="Xem danh sách bài hát trong hàng đợi">
+                  <span class="np-badge next-badge">TIẾP THEO</span>
+                  <div class="np-info">
+                    <div class="np-title" id="hudNextVideoTitle">Hàng đợi đang trống</div>
+                    <div class="np-meta" id="hudNextVideoMeta">Chưa có bài tiếp theo</div>
+                  </div>
                 </div>
               </div>
 
@@ -534,7 +544,7 @@
                 <div class="seat-grid-2d" id="seatGrid2D"></div>
                 <div class="seat-legend">
                   <div class="legend-item"><span class="legend-swatch" style="background:#F59E0B"></span> Ghế của bạn</div>
-                  <div class="legend-item"><span class="legend-swatch" style="background:rgba(139,92,246,0.6)"></span> Có người ngồi</div>
+                  <div class="legend-item"><span class="legend-swatch" style="background:#EF4444;box-shadow:0 0 6px rgba(239,68,68,0.7)"></span> Đã có người ngồi (Khóa)</div>
                   <div class="legend-item"><span class="legend-swatch" style="background:#222422;border:1px solid #F59E0B"></span> Ghế VIP (Hàng E-F)</div>
                 </div>
                 <div style="font-size:0.76rem;font-weight:700;color:var(--text-secondary);margin-top:4px;">
@@ -706,6 +716,7 @@
               <div class="cb-face cb-front"></div>
               <div class="cb-face cb-back">
                 <span class="seat-code-label">${seatCode}</span>
+                <span class="chair-occupant-name" id="chair-occ-${seatCode}"></span>
               </div>
               <div class="cb-face cb-top"></div>
             </div>
@@ -786,8 +797,14 @@
         node3D.dataset.cachedBubbleKey = bubbleKey;
 
         node3D.classList.remove('occupied', 'my-seat');
+        const chairOccEl = document.getElementById(`chair-occ-${code}`);
         if (person) {
           node3D.classList.add(person.isMe ? 'my-seat' : 'occupied');
+          node3D.title = person.isMe ? `Ghế của bạn (${person.name})` : `Ghế ${code} - Đã có "${person.name}" ngồi (Không thể chọn)`;
+          if (chairOccEl) {
+            chairOccEl.textContent = person.isMe ? `${person.name} (Bạn)` : person.name;
+            chairOccEl.style.display = 'block';
+          }
           const bubbleHtml = bubble
             ? `<div class="seat-speech-bubble">${escapeHtml(bubble.text)}</div>`
             : '';
@@ -826,6 +843,11 @@
             </div>
           `;
         } else {
+          node3D.title = `Ghế ${code} (Trống - Nhấp để ngồi)`;
+          if (chairOccEl) {
+            chairOccEl.textContent = '';
+            chairOccEl.style.display = 'none';
+          }
           slot.innerHTML = bubble
             ? `<div class="seat-speech-bubble">${escapeHtml(bubble.text)}</div>`
             : '';
@@ -855,6 +877,7 @@
       render2DSeatMap(occupants);
     }
     updateSkipVoteUI();
+    updatePlayPauseButton();
   }
 
   function selectSeat(seatCode, silent = false) {
@@ -863,7 +886,8 @@
     // Check if another person is already sitting in this seat
     const occupants = getOccupantMap();
     if (occupants[seatCode] && !occupants[seatCode].isMe) {
-      showToast(`⚠️ Ghế ${seatCode} đã có bạn "${occupants[seatCode].name}" ngồi rồi! Hãy chọn ghế trống khác.`);
+      if (sfx && typeof sfx.playReactionPop === 'function') sfx.playReactionPop();
+      showToast(`🚫 Ghế ${seatCode} đã có bạn "${occupants[seatCode].name}" ngồi rồi! Bạn không thể ngồi lên ghế này.`);
       return;
     }
 
@@ -1810,6 +1834,7 @@
     };
     state.skipVotes.clear();
     updateSkipVoteUI();
+    updateNextPlayingUI();
 
     const titleEl = document.getElementById('hudVideoTitle');
     const metaEl = document.getElementById('hudVideoMeta');
@@ -1880,15 +1905,52 @@
     const btn = document.getElementById('btnPlayPause');
     const screenPlayIcon = document.getElementById('screenPlayIcon');
     const overlay = document.getElementById('screenInteractiveOverlay');
+    const totalOccupants = Object.keys(getOccupantMap()).length;
 
     if (btn) {
-      btn.innerHTML = state.isPlaying ? '⏸️ Tạm dừng' : '▶️ Phát tiếp';
+      if (state.isPlaying) {
+        if (totalOccupants >= 2) {
+          btn.innerHTML = '🔒 Đang chiếu (Khóa dừng)';
+          btn.title = `Rạp đang có ${totalOccupants} người cùng xem. Chức năng tạm dừng bị vô hiệu hoá để đảm bảo trải nghiệm chung!`;
+          btn.classList.add('disabled-pause');
+        } else {
+          btn.innerHTML = '⏸️ Tạm dừng';
+          btn.title = 'Tạm dừng video (Phím Space)';
+          btn.classList.remove('disabled-pause');
+        }
+      } else {
+        btn.innerHTML = '▶️ Phát tiếp';
+        btn.title = 'Phát tiếp video (Phím Space)';
+        btn.classList.remove('disabled-pause');
+      }
     }
     if (screenPlayIcon) {
-      screenPlayIcon.textContent = state.isPlaying ? '⏸️' : '▶️';
+      if (state.isPlaying && totalOccupants >= 2) {
+        screenPlayIcon.textContent = '🔒';
+      } else {
+        screenPlayIcon.textContent = state.isPlaying ? '⏸️' : '▶️';
+      }
     }
     if (overlay) {
       overlay.classList.toggle('is-paused', !state.isPlaying);
+    }
+  }
+
+  function updateNextPlayingUI() {
+    const nextCard = document.getElementById('hudNextPlayingCard');
+    const titleEl = document.getElementById('hudNextVideoTitle');
+    const metaEl = document.getElementById('hudNextVideoMeta');
+    if (!titleEl || !metaEl) return;
+
+    if (state.queue && state.queue.length > 0) {
+      const nextVid = state.queue[0];
+      titleEl.textContent = nextVid.title || 'Bài tiếp theo';
+      metaEl.textContent = `${nextVid.channel || 'YouTube'} • Đề cử bởi ${nextVid.addedBy || 'Khán giả'} (${nextVid.votes || 0} vote)`;
+      if (nextCard) nextCard.classList.remove('is-empty');
+    } else {
+      titleEl.textContent = 'Hàng đợi đang trống';
+      metaEl.textContent = 'Chưa có bài tiếp theo • Hãy thêm video để nối tiếp hàng đợi!';
+      if (nextCard) nextCard.classList.add('is-empty');
     }
   }
 
@@ -1979,6 +2041,7 @@
 
   function renderQueue() {
     sortQueue();
+    updateNextPlayingUI();
     const listEl = document.getElementById('queueListContainer');
     const badgeEl = document.getElementById('queueCountBadge');
     if (badgeEl) badgeEl.textContent = state.queue.length;
@@ -2383,7 +2446,20 @@
         let cls = 'seat-cell-2d';
         if (isVip) cls += ' vip';
         if (occ) cls += occ.isMe ? ' mine' : ' occupied';
-        cellsHtml += `<div class="${cls}" data-seat-2d="${code}" title="Ghế ${code}${occ ? ' • ' + occ.name : ' (Trống)'}">${occ ? occ.emoji : code}</div>`;
+
+        const titleText = occ
+          ? (occ.isMe ? `Ghế ${code} - Ghế của bạn (${occ.name})` : `Ghế ${code} - Đã có bạn "${occ.name}" ngồi (Không thể chọn)`)
+          : `Ghế ${code} (Trống - Nhấp để ngồi)`;
+
+        let cellContent = code;
+        if (occ) {
+          if (occ.isMe) {
+            cellContent = `<span class="seat-2d-mine-star" title="Ghế của bạn">⭐</span>`;
+          } else {
+            cellContent = `<span class="seat-2d-occ-name" title="${escapeHtml(occ.name)}">${escapeHtml(occ.name.slice(0, 3))}</span>`;
+          }
+        }
+        cellsHtml += `<div class="${cls}" data-seat-2d="${code}" title="${escapeHtml(titleText)}">${cellContent}</div>`;
       });
     });
     grid.innerHTML = cellsHtml;
@@ -3028,7 +3104,14 @@
         return;
       }
       try {
+        const totalOccupants = Object.keys(getOccupantMap()).length;
         if (state.isPlaying) {
+          if (totalOccupants >= 2) {
+            showToast(`👥 Rạp hiện có ${totalOccupants} người cùng xem. Chức năng tạm dừng đã bị khoá để không gián đoạn mọi người!`);
+            showRippleBadge('🔒', 'Không thể tạm dừng', 'center');
+            if (sfx && typeof sfx.playReactionPop === 'function') sfx.playReactionPop();
+            return;
+          }
           if (typeof ytPlayer.pauseVideo === 'function') ytPlayer.pauseVideo();
           state.isPlaying = false;
           broadcastSync({ type: 'SYNC_PLAY_PAUSE', isPlaying: false, by: state.me.name });
@@ -3174,6 +3257,19 @@
     document.getElementById('btnScreenNextVideo')?.addEventListener('click', (e) => {
       e.stopPropagation();
       playNextFromQueue('Chuyển bài từ màn hình');
+    });
+
+    // Next Playing Card Click -> Jump to Queue
+    document.getElementById('hudNextPlayingCard')?.addEventListener('click', () => {
+      const tabQueueBtn = document.querySelector('.tab-trigger[data-tab="queue"]');
+      if (tabQueueBtn) tabQueueBtn.click();
+      if (state.queue && state.queue.length > 0) {
+        showToast(`🎵 Bài tiếp theo: "${state.queue[0].title}" (${state.queue[0].votes} vote)`);
+      } else {
+        showToast('ℹ️ Hàng đợi đang trống. Hãy dán link YouTube để thêm bài mới!');
+        const input = document.getElementById('inputYoutubeUrl');
+        if (input) input.focus();
+      }
     });
 
     document.getElementById('btnScreenFullscreen')?.addEventListener('click', (e) => {
@@ -3583,8 +3679,7 @@
       if (nameInput && nameInput.value.trim()) {
         state.me.name = nameInput.value.trim();
       }
-      const vipSeats = ['E4', 'E5', 'E6', 'E7', 'F4', 'F5', 'F6', 'F7'];
-      const pick = vipSeats[Math.floor(Math.random() * vipSeats.length)];
+      const pick = findRandomFreeSeat(state.me.seat);
       selectSeat(pick);
       updateProfilePreview();
       saveProfileToStorage();

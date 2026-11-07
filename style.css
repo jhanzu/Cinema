@@ -1356,6 +1356,92 @@ body.is-dragging-camera iframe,
   border-color: #F59E0B;
 }
 
+/* Chair Occupant Nameplate on Back of 3D Chair */
+.chair-occupant-name {
+  display: none;
+  font-size: 0.52rem;
+  font-weight: 800;
+  color: #FFF;
+  background: rgba(185, 28, 28, 0.95);
+  padding: 1px 4px;
+  border-radius: 4px;
+  max-width: 38px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 3px;
+  border: 1px solid rgba(254, 202, 202, 0.5);
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.7);
+  letter-spacing: -0.01em;
+}
+
+.seat-3d-node.my-seat .chair-occupant-name {
+  background: rgba(245, 158, 11, 0.95);
+  color: #111;
+  border-color: #FEF08A;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.7);
+}
+
+/* 3D Occupied Seats (RED COLOR) - Other users cannot sit */
+.seat-3d-node.occupied {
+  cursor: not-allowed !important;
+}
+
+.seat-3d-node.occupied:hover {
+  filter: brightness(1.2) drop-shadow(0 0 12px rgba(239, 68, 68, 0.8));
+}
+
+.seat-3d-node.occupied .cb-face.cb-back {
+  background: linear-gradient(180deg, #7F1D1D 0%, #450A0A 60%, #1F0505 100%) !important;
+  border-color: rgba(239, 68, 68, 0.75) !important;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.9), 0 0 16px rgba(239, 68, 68, 0.55) !important;
+}
+
+.seat-3d-node.occupied .cb-face.cb-front {
+  background:
+    linear-gradient(90deg, transparent 28%, rgba(255,255,255,0.08) 29%, rgba(0,0,0,0.3) 31%, transparent 32%),
+    linear-gradient(90deg, transparent 68%, rgba(255,255,255,0.08) 69%, rgba(0,0,0,0.3) 71%, transparent 72%),
+    linear-gradient(180deg, #991B1B 0%, #7F1D1D 60%, #450A0A 100%) !important;
+  border-color: rgba(239, 68, 68, 0.6) !important;
+}
+
+.seat-3d-node.occupied .cb-face.cb-top {
+  background: linear-gradient(90deg, #7F1D1D 0%, #B91C1C 50%, #7F1D1D 100%) !important;
+  border-color: rgba(239, 68, 68, 0.6) !important;
+}
+
+.seat-3d-node.occupied .cb-face.cb-side.left,
+.seat-3d-node.occupied .cb-face.cb-side.right {
+  background: linear-gradient(180deg, #7F1D1D 0%, #3B0707 100%) !important;
+  border-color: rgba(239, 68, 68, 0.5) !important;
+}
+
+.seat-3d-node.occupied .cc-face.cc-top {
+  background: linear-gradient(180deg, #991B1B 0%, #7F1D1D 50%, #450A0A 100%) !important;
+  border-color: rgba(239, 68, 68, 0.65) !important;
+}
+
+.seat-3d-node.occupied .seat-code-label {
+  color: #FCA5A5 !important;
+  text-shadow: 0 0 6px rgba(239, 68, 68, 0.8) !important;
+}
+
+.seat-3d-node.occupied .block-mannequin.is-peer .mannequin-nametag {
+  border-color: #EF4444 !important;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.85), 0 4px 10px rgba(0, 0, 0, 0.8) !important;
+  background: rgba(36, 10, 10, 0.96) !important;
+  color: #FEE2E2 !important;
+  font-weight: 800 !important;
+}
+
+.ctrl-btn.disabled-pause {
+  background: rgba(239, 68, 68, 0.16) !important;
+  border-color: rgba(239, 68, 68, 0.45) !important;
+  color: #FCA5A5 !important;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.28) !important;
+  cursor: not-allowed !important;
+}
+
 /* 3D Geometric Block Mannequin Sitting in Chair */
 .block-mannequin {
   position: absolute;
@@ -1633,16 +1719,48 @@ body.is-dragging-camera iframe,
   pointer-events: auto;
 }
 
+.now-playing-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 480px;
+}
+
 .now-playing-card {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 8px 14px;
   border-radius: 14px;
-  background: rgba(17, 18, 17, 0.85);
+  background: rgba(17, 18, 17, 0.88);
   backdrop-filter: blur(14px);
   border: 1px solid var(--border-subtle);
-  max-width: 480px;
+  width: 100%;
+}
+
+.next-playing-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 14px;
+  border-radius: 12px;
+  background: rgba(14, 15, 22, 0.82);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  width: 100%;
+}
+
+.next-playing-card:hover {
+  background: rgba(22, 24, 38, 0.94);
+  border-color: rgba(52, 211, 153, 0.35);
+  transform: translateY(-1px);
+}
+
+.next-playing-card.is-empty {
+  opacity: 0.65;
+  cursor: default;
 }
 
 .np-badge {
@@ -1658,8 +1776,15 @@ body.is-dragging-camera iframe,
   letter-spacing: 0.04em;
 }
 
+.np-badge.next-badge {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.24), rgba(5, 150, 105, 0.3));
+  color: #6EE7B7;
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
 .np-info {
   overflow: hidden;
+  flex: 1;
 }
 
 .np-title {
@@ -1668,11 +1793,15 @@ body.is-dragging-camera iframe,
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: #F8FAFC;
 }
 
 .np-meta {
   font-size: 0.72rem;
   color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .camera-hint-pill {
@@ -2296,9 +2425,30 @@ body.is-dragging-camera iframe,
 }
 
 .seat-cell-2d.occupied {
-  background: rgba(139, 92, 246, 0.28);
-  border-color: rgba(139, 92, 250, 0.6);
-  color: #DDD6FE;
+  background: linear-gradient(135deg, #EF4444 0%, #B91C1C 100%) !important;
+  border-color: #F87171 !important;
+  color: #FFF !important;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.65) !important;
+  cursor: not-allowed !important;
+}
+
+.seat-cell-2d.occupied:hover {
+  transform: none !important;
+  filter: brightness(1.2);
+}
+
+.seat-2d-occ-name {
+  font-size: 0.52rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seat-2d-mine-star {
+  font-size: 0.68rem;
 }
 
 .seat-cell-2d.mine {

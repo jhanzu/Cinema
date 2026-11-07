@@ -619,6 +619,11 @@ function handleClientMessage(ws, data) {
     }
 
     case 'SYNC_PLAY_PAUSE': {
+      const totalOccupants = Object.keys(roomState.occupants).length;
+      if (!data.isPlaying && totalOccupants >= 2) {
+        // Disallow pause if 2 or more people in theater
+        return;
+      }
       roomState.currentVideo.isPlaying = !!data.isPlaying;
       broadcast({
         type: 'SYNC_PLAY_PAUSE',
