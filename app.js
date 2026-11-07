@@ -132,10 +132,27 @@
 
   const sfx = new SoundFX();
 
-  // Unlock AudioContext on first user interaction without console warnings
+  // Unlock AudioContext and Video playback on first user interaction without console warnings
   function setupAudioUnlock() {
     const unlock = () => {
       sfx.init();
+      if (ytReady && ytPlayer) {
+        try {
+          const pState = typeof ytPlayer.getPlayerState === 'function' ? ytPlayer.getPlayerState() : -1;
+          if (pState !== 1) {
+            ytPlayer.playVideo();
+          }
+          if (state.isMuted && typeof ytPlayer.unMute === 'function') {
+            ytPlayer.unMute();
+            ytPlayer.setVolume(state.volume || 25);
+            state.isMuted = false;
+            const screenMuteIcon = document.getElementById('screenMuteIcon');
+            if (screenMuteIcon) screenMuteIcon.textContent = '🔊';
+            const muteBtn = document.getElementById('btnMuteToggle');
+            if (muteBtn) muteBtn.textContent = '🔊';
+          }
+        } catch (_) {}
+      }
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', unlock);
     };
@@ -199,7 +216,7 @@
       startedBy: 'Hanzu Cinema',
       ambilight: ['#38BDF8', '#EC4899']
     },
-    isPlaying: true,
+    isPlaying: false,
     isMuted: false,
     volume: 25,
     skipVotes: new Set(),
@@ -717,7 +734,6 @@
               <div class="cb-face cb-front"></div>
               <div class="cb-face cb-back">
                 <span class="seat-code-label">${seatCode}</span>
-                <span class="chair-occupant-name" id="chair-occ-${seatCode}"></span>
               </div>
               <div class="cb-face cb-top"></div>
             </div>
@@ -811,22 +827,25 @@
         node3D.dataset.cachedOccKey = occKey;
         node3D.dataset.cachedBubbleKey = bubbleKey;
 
-        node3D.classList.remove('occupied', 'my-seat');
-        const chairOccEl = document.getElementById(`chair-occ-${code}`);
+        node3D.classList.remove('occupied', 'my-seat', 'occupied-peer');
         const chairBadgeEl = document.getElementById(`chair-badge-${code}`);
         if (person) {
-          node3D.classList.add('occupied');
           if (person.isMe) {
             node3D.classList.add('my-seat');
-          }
-          node3D.title = person.isMe ? `Ghế của bạn (${person.name})` : `Ghế ${code} - Đã có "${person.name}" ngồi (Không thể chọn)`;
-          if (chairOccEl) {
-            chairOccEl.textContent = '';
-            chairOccEl.style.display = 'none';
-          }
-          if (chairBadgeEl) {
-            chairBadgeEl.innerHTML = `<span style="font-size:0.74rem;">${person.emoji || '👤'}</span> <span>${escapeHtml(person.name)}${person.isMe ? ' (Bạn)' : ''}</span>`;
-            chairBadgeEl.style.display = 'inline-flex';
+            node3D.title = `Ghế ${code} của bạn (${person.name}) • Nhấp để đứng/đổi ghế`;
+            if (chairBadgeEl) {
+              chairBadgeEl.className = 'chair-name-badge my-badge';
+              chairBadgeEl.innerHTML = `<span style="font-size:0.74rem;">${person.emoji || '😎'}</span> <span>${escapeHtml(person.name)}</span> <span class="cnb-tag" style="color:#FDE047;font-size:0.65rem;font-weight:700;margin-left:2px;">(Bạn)</span>`;
+              chairBadgeEl.style.display = 'inline-flex';
+            }
+          } else {
+            node3D.classList.add('occupied', 'occupied-peer');
+            node3D.title = `Ghế ${code} — Đã có "${person.name}" ngồi (Không thể chọn)`;
+            if (chairBadgeEl) {
+              chairBadgeEl.className = 'chair-name-badge peer-badge';
+              chairBadgeEl.innerHTML = `<span style="font-size:0.74rem;">${person.emoji || '👤'}</span> <span>${escapeHtml(person.name)}</span>`;
+              chairBadgeEl.style.display = 'inline-flex';
+            }
           }
           const bubbleHtml = bubble
             ? `<div class="seat-speech-bubble">${escapeHtml(bubble.text)}</div>`
@@ -867,10 +886,6 @@
           `;
         } else {
           node3D.title = `Ghế ${code} (Trống - Nhấp để ngồi)`;
-          if (chairOccEl) {
-            chairOccEl.textContent = '';
-            chairOccEl.style.display = 'none';
-          }
           if (chairBadgeEl) {
             chairBadgeEl.innerHTML = '';
             chairBadgeEl.style.display = 'none';
@@ -1263,12 +1278,12 @@
       if (!apiLoaded && (!ytPlayer || !ytReady)) {
         createFallbackIframe(state.currentVideo.videoId);
       }
-    }, 4000);
+    }, 7500);
   }
 
   function createPlayerInstance() {
     try {
-      const originParam = (window.location.origin && window.location.origin.startsWith('http'))
+      const originParam = (window.location.protocol.startsWith('http') && window.location.origin)
         ? window.location.origin
         : undefined;
 
@@ -1283,8 +1298,9 @@
           modestbranding: 1,
           playsinline: 1,
           enablejsapi: 1,
-          origin: originParam,
-          widget_referrer: window.location.href
+          fs: 1,
+          iv_load_policy: 3,
+          origin: originParam
         },
         events: {
           onReady: (event) => {
@@ -1292,8 +1308,19 @@
             hideVideoRescueCard();
             try {
               event.target.setVolume(state.volume);
+              event.target.playVideo();
             } catch (e) {}
             updateAmbilightColors(state.currentVideo.ambilight);
+
+            // Handle browser unmuted autoplay block
+            setTimeout(() => {
+              try {
+                const pState = ytPlayer.getPlayerState ? ytPlayer.getPlayerState() : -1;
+                if (pState !== 1) {
+                  event.target.playVideo();
+                }
+              } catch (_) {}
+            }, 600);
 
             if (pendingVideoToLoad) {
               const vid = pendingVideoToLoad;
@@ -1307,11 +1334,14 @@
               state.isPlaying = true;
               hideVideoRescueCard();
               updatePlayPauseButton();
+              updateAmbilightColors(state.currentVideo.ambilight);
             } else if (event.data === window.YT.PlayerState.ENDED) {
               handleVideoEnd();
             } else if (event.data === window.YT.PlayerState.PAUSED) {
               state.isPlaying = false;
               updatePlayPauseButton();
+            } else if (event.data === window.YT.PlayerState.CUED) {
+              try { event.target.playVideo(); } catch (_) {}
             }
           },
           onError: (event) => {
@@ -1333,13 +1363,15 @@
     mount.innerHTML = `
       <iframe
         id="youtubePlayerContainer"
-        src="https://www.youtube.com/embed/${videoId}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1${startParam}"
+        src="https://www.youtube.com/embed/${videoId}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1${startParam}"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowfullscreen
         referrerpolicy="strict-origin-when-cross-origin"
       ></iframe>
     `;
     ytReady = true;
+    state.isPlaying = true;
+    updatePlayPauseButton();
     updateAmbilightColors(state.currentVideo.ambilight);
   }
 
@@ -1687,7 +1719,13 @@
 
   function hideVideoRescueCard() {
     const existing = document.getElementById('videoRescueBackdrop');
-    if (existing) existing.remove();
+    if (existing) {
+      if (typeof existing.remove === 'function') {
+        existing.remove();
+      } else if (existing.parentNode) {
+        existing.parentNode.removeChild(existing);
+      }
+    }
   }
 
   // =========================================================================
@@ -1958,6 +1996,18 @@
     const c1 = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
     const c2 = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
     return [c1, c2];
+  }
+
+  // Playback Lock Guard (Locked when 2 or more viewers are in the theater)
+  function isPlaybackLocked() {
+    return Object.keys(getOccupantMap()).length >= 2;
+  }
+
+  function notifyPlaybackLocked() {
+    const count = Object.keys(getOccupantMap()).length;
+    showToast(`👥 Rạp hiện có ${count} người cùng xem. Chỉ được chỉnh âm lượng cá nhân, các chức năng phát/tạm dừng/tua/chuyển bài chung đã bị khóa!`);
+    showRippleBadge('🔒', 'Đã khóa điều khiển (≥ 2 người)', 'center');
+    if (sfx && typeof sfx.playReactionPop === 'function') sfx.playReactionPop();
   }
 
   function updatePlayPauseButton() {
@@ -2988,8 +3038,8 @@
       pill.title = 'Đang kết nối máy chủ phòng chiếu...';
     } else {
       pill.classList.add('offline');
-      label.textContent = 'Ngoại tuyến';
-      pill.title = 'Chưa kết nối máy chủ chung. Bấm để kết nối lại.';
+      label.textContent = 'Phòng riêng (Offline 🟢)';
+      pill.title = 'Đang ở phòng riêng (Ngoại tuyến). Bạn có thể xem phim và đổi ghế bình thường. Bấm để kết nối máy chủ chung.';
     }
   }
 
@@ -3225,18 +3275,6 @@
       });
     }
 
-    // Playback Lock Guard (Locked when 2 or more viewers are in the theater)
-    function isPlaybackLocked() {
-      return Object.keys(getOccupantMap()).length >= 2;
-    }
-
-    function notifyPlaybackLocked() {
-      const count = Object.keys(getOccupantMap()).length;
-      showToast(`👥 Rạp hiện có ${count} người cùng xem. Chỉ được chỉnh âm lượng cá nhân, các chức năng phát/tạm dừng/tua/chuyển bài chung đã bị khóa!`);
-      showRippleBadge('🔒', 'Đã khóa điều khiển (≥ 2 người)', 'center');
-      if (sfx && typeof sfx.playReactionPop === 'function') sfx.playReactionPop();
-    }
-
     // YouTube Core Player Functions
     function togglePlayPause() {
       if (!ytReady || !ytPlayer) {
@@ -3248,7 +3286,8 @@
         return;
       }
       try {
-        if (state.isPlaying) {
+        const pState = typeof ytPlayer.getPlayerState === 'function' ? ytPlayer.getPlayerState() : -1;
+        if (pState === 1) {
           if (typeof ytPlayer.pauseVideo === 'function') ytPlayer.pauseVideo();
           state.isPlaying = false;
           broadcastSync({ type: 'SYNC_PLAY_PAUSE', isPlaying: false, by: state.me.name });
@@ -3835,8 +3874,8 @@
       const input = document.getElementById('inputProfileName');
       if (input) {
         input.value = state.me.name;
-        input.focus();
-        input.select();
+        if (typeof input.focus === 'function') input.focus();
+        if (typeof input.select === 'function') input.select();
       }
       updateProfilePreview();
     };
