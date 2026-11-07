@@ -984,377 +984,94 @@ body.is-dragging-camera iframe,
   contain: layout style;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  will-change: transform;
 }
 
 .seat-3d-node:hover {
-  filter: brightness(1.25);
-  transform: translateZ(6px);
-}
-
-.seat-3d-node.my-seat,
-.seat-3d-node:hover {
-  transition: transform 0.15s cubic-bezier(0.2, 0, 0, 1), filter 0.15s ease;
+  filter: brightness(1.22);
 }
 
 /* ==========================================================================
-   Complete 3D Volumetric Cinema Chair Model (Depth, Faces, Cushions, Pedestal)
+   Streamlined High-Performance Cinema Chair Model (Lightweight, 60 FPS)
    ========================================================================== */
 .chair-3d-model {
   position: absolute;
   inset: 0;
   transform-style: preserve-3d;
   pointer-events: none;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  will-change: transform;
 }
 
-.seat-3d-node.my-seat .chair-3d-model,
-.seat-3d-node:hover .chair-3d-model {
-  transition: transform 0.15s cubic-bezier(0.2, 0, 0, 1);
-}
-
-/* 1. Volumetric 3D Backrest Box (Depth: 10px) */
-.chair-back-box {
+/* 1. Ergonomic Curved Cinema Backrest */
+.chair-back {
   position: absolute;
   bottom: 12px;
   left: 5px;
   width: 44px;
   height: 44px;
-  transform-style: preserve-3d;
-  z-index: 2;
-}
-
-.cb-face,
-.cc-face,
-.ca-face {
-  position: absolute;
-  box-sizing: border-box;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-}
-
-/* Rear hard-shell casing facing the viewer in Orbit mode */
-.cb-face.cb-back {
-  inset: 0;
-  transform: translateZ(5px);
+  border-radius: 9px 9px 3px 3px;
   background: linear-gradient(180deg, #262926 0%, #171817 60%, #0f100f 100%);
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 9px 9px 3px 3px;
-  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.85);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.85);
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-/* Front plush cushion facing the cinema screen with built-in realistic stitch lines */
-.cb-face.cb-front {
-  inset: 0;
-  transform: rotateY(180deg) translateZ(5px);
-  background:
-    linear-gradient(90deg, transparent 28%, rgba(255,255,255,0.08) 29%, rgba(0,0,0,0.3) 31%, transparent 32%),
-    linear-gradient(90deg, transparent 68%, rgba(255,255,255,0.08) 69%, rgba(0,0,0,0.3) 71%, transparent 72%),
-    linear-gradient(180deg, #303430 0%, #202220 60%, #151615 100%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 9px 9px 3px 3px;
-  overflow: hidden;
-}
-
-/* Upholstery vertical stitching on front cushion */
-.cb-stitch {
-  position: absolute;
-  top: 6px;
-  bottom: 4px;
-  width: 1px;
-  background: rgba(255, 255, 255, 0.09);
-  box-shadow: 1px 0 0 rgba(0, 0, 0, 0.4);
-}
-.cb-stitch.left { left: 13px; }
-.cb-stitch.right { right: 13px; }
-
-/* Top headrest curved surface (thickness 10px) */
-.cb-face.cb-top {
-  top: -5px;
-  left: 0;
-  width: 44px;
-  height: 10px;
-  transform: rotateX(90deg);
-  background: linear-gradient(90deg, #1d1f1d 0%, #2e312e 50%, #1d1f1d 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-}
-
-/* Left & Right side edges of backrest (thickness 10px) */
-.cb-face.cb-side.left {
-  top: 0;
-  left: -5px;
-  width: 10px;
-  height: 44px;
-  transform: rotateY(-90deg);
-  background: linear-gradient(180deg, #222422 0%, #121312 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-.cb-face.cb-side.right {
-  top: 0;
-  right: -5px;
-  width: 10px;
-  height: 44px;
-  transform: rotateY(90deg);
-  background: linear-gradient(180deg, #222422 0%, #121312 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-/* 2. Volumetric 3D Seat Cushion Box (Thickness: 8px, Depth: 26px) */
-.chair-cushion-box {
-  position: absolute;
-  bottom: 12px;
-  left: 6px;
-  width: 42px;
-  height: 8px;
-  transform-style: preserve-3d;
-  z-index: 1;
-}
-
-.cc-face {
-  position: absolute;
+  transform: translateZ(4px);
   box-sizing: border-box;
-}
-
-/* Top seating surface with built-in realistic seam line */
-.cc-face.cc-top {
-  top: -13px;
-  left: 0;
-  width: 42px;
-  height: 26px;
-  transform: translateY(-4px) rotateX(90deg);
-  background:
-    linear-gradient(180deg, transparent 48%, rgba(255, 255, 255, 0.08) 50%, rgba(0, 0, 0, 0.5) 52%, transparent 54%),
-    linear-gradient(180deg, #272a27 0%, #1a1b1a 100%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 5px;
-  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.6);
-  position: relative;
-  overflow: hidden;
-}
-
-.cc-seam {
-  position: absolute;
-  top: 50%;
-  left: 6px;
-  right: 6px;
-  height: 1px;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-/* Front cushion rim facing screen */
-.cc-face.cc-front {
-  top: 0;
-  left: 0;
-  width: 42px;
-  height: 8px;
-  transform: translateZ(-13px);
-  background: linear-gradient(180deg, #232623 0%, #131413 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0 0 3px 3px;
-}
-
-/* Bottom underside plate */
-.cc-face.cc-bottom {
-  top: -13px;
-  left: 0;
-  width: 42px;
-  height: 26px;
-  transform: translateY(4px) rotateX(-90deg);
-  background: #0e0f0e;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-/* Side cushion walls */
-.cc-face.cc-side.left {
-  top: 0;
-  left: -13px;
-  width: 26px;
-  height: 8px;
-  transform: translateX(-8px) rotateY(-90deg);
-  background: #181a18;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-.cc-face.cc-side.right {
-  top: 0;
-  right: -13px;
-  width: 26px;
-  height: 8px;
-  transform: translateX(8px) rotateY(90deg);
-  background: #181a18;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-/* 3. Volumetric 3D Armrests with 3D Cup Holders */
-.chair-armrest {
-  position: absolute;
-  bottom: 8px;
-  width: 6px;
-  height: 24px;
-  transform-style: preserve-3d;
-  background: linear-gradient(180deg, #323632 0%, #1c1e1c 100%);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 3px;
-  z-index: 3;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 2px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
-}
-.chair-armrest.left { left: 0px; }
-.chair-armrest.right { right: 0px; }
-
-.chair-pedestal {
-  position: absolute;
-  bottom: -13px;
-  left: 21px;
-  width: 12px;
-  height: 15px;
-  background: linear-gradient(180deg, #282b28 0%, #111211 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.9);
-  z-index: 0;
-}
-
-.chair-armrest-box {
-  position: absolute;
-  bottom: 8px;
-  width: 6px;
-  height: 24px;
-  transform-style: preserve-3d;
-  z-index: 3;
-}
-.chair-armrest-box.left { left: 0px; }
-.chair-armrest-box.right { right: 0px; }
-
-.ca-face {
-  position: absolute;
-  box-sizing: border-box;
-}
-
-/* Armrest top rail */
-.ca-face.ca-top {
-  top: -14px;
-  left: 0;
-  width: 6px;
-  height: 28px;
-  transform: translateY(-12px) rotateX(90deg);
-  background: linear-gradient(180deg, #303330 0%, #1c1e1c 100%);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 3px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  padding-top: 2px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
-}
-
-.cup-holder-3d {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #000;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.9);
-}
-
-/* Armrest front cap */
-.ca-face.ca-front {
-  top: 0;
-  left: 0;
-  width: 6px;
-  height: 24px;
-  transform: translateZ(-14px);
-  background: linear-gradient(180deg, #262926 0%, #151615 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-}
-
-/* Outer side panel of armrest */
-.ca-face.ca-side.outer {
-  top: 0;
-  width: 28px;
-  height: 24px;
-  background: linear-gradient(180deg, #212421 0%, #131413 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-.chair-armrest-box.left .ca-face.ca-side.outer {
-  left: -11px;
-  transform: translateX(-3px) rotateY(-90deg);
-}
-.chair-armrest-box.right .ca-face.ca-side.outer {
-  right: -11px;
-  transform: translateX(3px) rotateY(90deg);
-}
-
-/* 4. Volumetric 3D Pedestal Base & Floor Plate */
-.chair-pedestal-box {
-  position: absolute;
-  bottom: -15px;
-  left: 21px;
-  width: 12px;
-  height: 16px;
-  transform-style: preserve-3d;
-  z-index: 0;
-}
-
-.cp-stem {
-  width: 12px;
-  height: 16px;
-  background: linear-gradient(180deg, #272a27 0%, #121312 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.9);
-}
-
-.cp-foot {
-  position: absolute;
-  bottom: -1px;
-  left: -4px;
-  width: 20px;
-  height: 16px;
-  transform: rotateX(90deg);
-  background: #181918;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 3px;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.95);
 }
 
 .seat-code-label {
-  font-size: 0.62rem;
+  font-size: 0.65rem;
   font-family: var(--font-mono);
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.65);
   letter-spacing: -0.02em;
 }
 
-/* VIP Rows E & F Gold Trim for 3D Chair Model */
-.seat-3d-node.vip-seat .cb-face.cb-back {
+/* 2. Plush Cushion Base */
+.chair-cushion {
+  position: absolute;
+  bottom: 8px;
+  left: 6px;
+  width: 42px;
+  height: 22px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #242724 0%, #161716 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transform: translateY(4px) rotateX(75deg);
+  transform-origin: bottom center;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.7);
+  box-sizing: border-box;
+}
+
+/* 3. Sleek Armrests */
+.chair-arm {
+  position: absolute;
+  bottom: 8px;
+  width: 5px;
+  height: 26px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #303330 0%, #181918 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+  box-sizing: border-box;
+}
+.chair-arm.left { left: 0px; }
+.chair-arm.right { right: 0px; }
+
+/* VIP Rows E & F Gold Trim */
+.seat-3d-node.vip-seat .chair-back {
   border-color: rgba(245, 158, 11, 0.55);
   background: linear-gradient(180deg, #3d321d 0%, #201a0e 100%);
   box-shadow: 0 0 14px rgba(245, 158, 11, 0.28);
 }
-.seat-3d-node.vip-seat .cb-face.cb-front {
-  background: linear-gradient(180deg, #483b23 0%, #261f12 100%);
-  border-color: rgba(245, 158, 11, 0.4);
-}
-.seat-3d-node.vip-seat .cc-face.cc-top {
+.seat-3d-node.vip-seat .chair-cushion {
   border-color: rgba(245, 158, 11, 0.4);
   background: linear-gradient(180deg, #382e18 0%, #20190a 100%);
 }
+.seat-3d-node.vip-seat .chair-arm {
+  border-color: rgba(245, 158, 11, 0.45);
+}
 .seat-3d-node.vip-seat .seat-code-label {
   color: #FBBF24;
-}
-.seat-3d-node.vip-seat .cup-holder-3d {
-  border-color: #F59E0B;
 }
 
 /* 3D Avatar Slot positioning within each chair */
@@ -1426,46 +1143,18 @@ body.is-dragging-camera iframe,
   filter: brightness(1.2) drop-shadow(0 0 16px rgba(239, 68, 68, 0.95));
 }
 
-.seat-3d-node.occupied-peer .cb-face.cb-back {
+.seat-3d-node.occupied-peer .chair-back {
   background: linear-gradient(180deg, #EF4444 0%, #DC2626 50%, #991B1B 100%) !important;
   border-color: #F87171 !important;
   box-shadow: 0 5px 18px rgba(0, 0, 0, 0.9), 0 0 18px rgba(239, 68, 68, 0.75) !important;
 }
 
-.seat-3d-node.occupied-peer .cb-face.cb-front {
-  background:
-    linear-gradient(90deg, transparent 28%, rgba(255,255,255,0.12) 29%, rgba(0,0,0,0.2) 31%, transparent 32%),
-    linear-gradient(90deg, transparent 68%, rgba(255,255,255,0.12) 69%, rgba(0,0,0,0.2) 71%, transparent 72%),
-    linear-gradient(180deg, #F87171 0%, #EF4444 40%, #B91C1C 100%) !important;
-  border-color: #FCA5A5 !important;
-}
-
-.seat-3d-node.occupied-peer .cb-face.cb-top {
-  background: linear-gradient(90deg, #DC2626 0%, #EF4444 50%, #DC2626 100%) !important;
-  border-color: #F87171 !important;
-}
-
-.seat-3d-node.occupied-peer .cb-face.cb-side.left,
-.seat-3d-node.occupied-peer .cb-face.cb-side.right {
-  background: linear-gradient(180deg, #DC2626 0%, #7F1D1D 100%) !important;
-  border-color: #EF4444 !important;
-}
-
-.seat-3d-node.occupied-peer .cc-face.cc-top {
+.seat-3d-node.occupied-peer .chair-cushion {
   background: linear-gradient(180deg, #EF4444 0%, #DC2626 50%, #991B1B 100%) !important;
   border-color: #F87171 !important;
 }
 
-.seat-3d-node.occupied-peer .cc-face.cc-front,
-.seat-3d-node.occupied-peer .cc-face.cc-bottom,
-.seat-3d-node.occupied-peer .cc-face.cc-left,
-.seat-3d-node.occupied-peer .cc-face.cc-right {
-  background: linear-gradient(180deg, #DC2626 0%, #991B1B 100%) !important;
-  border-color: #EF4444 !important;
-}
-
-.seat-3d-node.occupied-peer .chair-armrest-left,
-.seat-3d-node.occupied-peer .chair-armrest-right {
+.seat-3d-node.occupied-peer .chair-arm {
   background: linear-gradient(180deg, #EF4444 0%, #991B1B 100%) !important;
   border-color: #F87171 !important;
 }
@@ -1492,19 +1181,19 @@ body.is-dragging-camera iframe,
   filter: brightness(1.25) drop-shadow(0 0 16px rgba(56, 189, 248, 0.85));
 }
 
-.seat-3d-node.my-seat .cb-face.cb-back {
+.seat-3d-node.my-seat .chair-back {
   background: linear-gradient(180deg, #1E3A8A 0%, #172554 60%, #0F172A 100%) !important;
   border: 1.5px solid #38BDF8 !important;
   box-shadow: 0 5px 18px rgba(0, 0, 0, 0.9), 0 0 20px rgba(56, 189, 248, 0.65) !important;
 }
 
-.seat-3d-node.my-seat .cb-face.cb-top {
+.seat-3d-node.my-seat .chair-cushion {
+  background: linear-gradient(180deg, #1E3A8A 0%, #1E40AF 100%) !important;
   border-color: #38BDF8 !important;
-  background: linear-gradient(90deg, #0284C7 0%, #38BDF8 50%, #0284C7 100%) !important;
 }
 
-.seat-3d-node.my-seat .cc-face.cc-top {
-  background: linear-gradient(180deg, #1E3A8A 0%, #1E40AF 100%) !important;
+.seat-3d-node.my-seat .chair-arm {
+  background: linear-gradient(180deg, #1E40AF 0%, #0F172A 100%) !important;
   border-color: #38BDF8 !important;
 }
 

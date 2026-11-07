@@ -703,6 +703,7 @@
     const container = document.getElementById('seatsAuditorium3D');
     if (!container) return;
     container.innerHTML = '';
+    const fragment = document.createDocumentFragment();
 
     ROWS.forEach((rowLetter, rIdx) => {
       COLS.forEach((colNum, cIdx) => {
@@ -716,9 +717,7 @@
         if (colNum > 8) aisleOffset += 18;
 
         const x = cIdx * 78 + aisleOffset + 32;
-        // Hàng ghế nằm song song với mặt đất (không nghiêng nữa): y = 0 cho tất cả 10 hàng
         const y = 0;
-        // Ghế tách xa màn hình một khoảng thông thoáng: Row A bắt đầu từ z = 30px (cách màn hình 180px)
         const z = rIdx * 50 + 30;
 
         seatCoordMap[seatCode] = { x, y, z, rIdx, cIdx, rowLetter, colNum };
@@ -730,31 +729,15 @@
         seatNode.style.transform = `translate3d(${x}px, ${y}px, ${z}px)`;
         seatNode.title = `Ghế ${seatCode} ${isVip ? '(Hàng VIP Trung Tâm)' : ''} — Click để ngồi`;
 
+        // Streamlined high-performance chair (no redundant DOM micro-elements, 60fps)
         seatNode.innerHTML = `
           <div class="chair-name-badge" id="chair-badge-${seatCode}"></div>
           <div class="seat-avatar-slot" id="avatar-slot-${seatCode}"></div>
           <div class="chair-3d-model">
-            <!-- 3D Ergonomic Backrest -->
-            <div class="chair-back-box">
-              <div class="cb-face cb-front"></div>
-              <div class="cb-face cb-back">
-                <span class="seat-code-label">${seatCode}</span>
-              </div>
-              <div class="cb-face cb-top"></div>
-            </div>
-
-            <!-- 3D Plush Seat Cushion -->
-            <div class="chair-cushion-box">
-              <div class="cc-face cc-top"></div>
-              <div class="cc-face cc-front"></div>
-            </div>
-
-            <!-- 3D Sleek Armrests with Built-in Cup Holders -->
-            <div class="chair-armrest left"><div class="cup-holder-3d"></div></div>
-            <div class="chair-armrest right"><div class="cup-holder-3d"></div></div>
-
-            <!-- Pedestal Floor Mount Base -->
-            <div class="chair-pedestal"></div>
+            <div class="chair-back"><span class="seat-code-label">${seatCode}</span></div>
+            <div class="chair-cushion"></div>
+            <div class="chair-arm left"></div>
+            <div class="chair-arm right"></div>
           </div>
         `;
 
@@ -763,14 +746,16 @@
           selectSeat(seatCode);
         });
 
-        container.appendChild(seatNode);
+        fragment.appendChild(seatNode);
         seatNodeCache[seatCode] = {
           node3D: seatNode,
-          slot: seatNode.querySelector('.seat-avatar-slot')
+          slot: seatNode.querySelector('.seat-avatar-slot'),
+          badge: seatNode.querySelector('.chair-name-badge')
         };
       });
     });
 
+    container.appendChild(fragment);
     refreshSeatsVisuals();
   }
 
@@ -866,7 +851,7 @@
         node3D.dataset.cachedBubbleKey = bubbleKey;
 
         node3D.classList.remove('occupied', 'my-seat', 'occupied-peer');
-        const chairBadgeEl = document.getElementById(`chair-badge-${code}`);
+        const chairBadgeEl = cached ? cached.badge : document.getElementById(`chair-badge-${code}`);
         if (person) {
           if (person.isMe) {
             node3D.classList.add('my-seat');
