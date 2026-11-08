@@ -712,7 +712,9 @@ body.is-dragging-camera iframe,
 /* Bottom YouTube Controls HUD */
 .screen-yt-hud {
   padding: 14px 16px 10px;
-  background: linear-gradient(0deg, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.6) 65%, transparent 100%);
+  background: linear-gradient(0deg, rgba(8, 8, 14, 0.96) 0%, rgba(8, 8, 14, 0.82) 65%, transparent 100%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   opacity: 0;
   transform: translateY(8px);
   transition: opacity 0.28s ease, transform 0.28s ease;
@@ -827,6 +829,8 @@ body.is-dragging-camera iframe,
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .yt-btn {
@@ -840,6 +844,9 @@ body.is-dragging-camera iframe,
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.2;
   transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
