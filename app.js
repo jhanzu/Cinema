@@ -250,6 +250,8 @@
 
     // Voting Queue & History (Syncs with live queue)
     queue: (cachedLiveRoom && Array.isArray(cachedLiveRoom.queue)) ? cachedLiveRoom.queue : [...INITIAL_QUEUE],
+    mixerCount: 5,
+    mixerRecommendations: [],
     history: [],
 
     // Active Speech Bubbles on 3D Seats: { [seatCode]: { text, timer } }
@@ -607,6 +609,47 @@
                 </form>
                 <div class="preset-chips" id="presetChipsContainer"></div>
               </div>
+
+              <!-- Solo Viewer Mixer Queue Card (Appears only when theater has 1 person) -->
+              <div class="solo-mixer-card" id="soloMixerCard" style="display:none;">
+                <div class="solo-mixer-header">
+                  <div class="solo-mixer-title-wrap">
+                    <span class="solo-mixer-badge">🎧 Rạp 1 người • Mixer Queue</span>
+                    <div class="solo-mixer-title">Trộn nhạc theo bài đang chiếu</div>
+                    <div class="solo-mixer-sub">Tự động chọn những bài mọi người hay nghe cùng</div>
+                  </div>
+                  <div class="solo-mixer-icon">🔀</div>
+                </div>
+
+                <div class="solo-mixer-current-track" id="soloMixerCurrentTrack">
+                  <span class="sm-dot"></span>
+                  <span class="sm-label">Bài gốc:</span>
+                  <span class="sm-title" id="soloMixerSourceTitle">Đang cập nhật...</span>
+                </div>
+
+                <div class="solo-mixer-controls">
+                  <div class="sm-count-row">
+                    <span class="sm-count-label">Số bài mix:</span>
+                    <div class="sm-count-pills" id="smCountPills">
+                      <button type="button" class="sm-pill-btn" data-count="3">3 bài</button>
+                      <button type="button" class="sm-pill-btn active" data-count="5">5 bài</button>
+                      <button type="button" class="sm-pill-btn" data-count="8">8 bài</button>
+                      <button type="button" class="sm-pill-btn" data-count="10">10 bài</button>
+                    </div>
+                  </div>
+
+                  <div class="sm-actions-row">
+                    <button type="button" class="btn-mixer-preview" id="btnOpenMixerPreview" title="Xem danh sách bài gợi ý và tự chọn">
+                      👁️ Xem gợi ý
+                    </button>
+                    <button type="button" class="btn-mixer-add-now" id="btnMixerAddNow" title="Trộn và thêm ngay vào hàng đợi">
+                      <span class="sm-spinner" id="smSpinner" style="display:none;">⏳</span>
+                      <span>🔀 Mix ngay <span id="smAddCountLabel">5</span> bài</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <div class="queue-list" id="queueListContainer"></div>
             </section>
 
@@ -800,6 +843,39 @@
               <button type="button" class="btn-submit uv-btn-confirm vl-btn-confirm" id="btnConfirmVideoLimit">
                 ✅ Đã Hiểu • Chọn Bài Khác
               </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mixer Preview & Selection Modal -->
+        <div class="modal-backdrop" id="mixerPreviewModal">
+          <div class="modal-card" style="max-width: 520px;">
+            <div class="modal-header">
+              <div class="modal-title">🔀 Gợi ý bài hát nghe cùng (Mixer Queue)</div>
+              <button class="icon-btn" id="btnCloseMixerModal" type="button">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="mixer-modal-banner">
+                <span class="mm-banner-left">🎵 Bài gốc: <strong id="modalMixerSourceSong">...</strong></span>
+                <span class="mixer-limit-tag">⏱️ Dưới 8 phút</span>
+              </div>
+              <div class="mixer-modal-toolbar">
+                <span class="mixer-hint-text">Chọn những bài bạn muốn thêm vào hàng đợi:</span>
+                <div class="mixer-select-tools">
+                  <button type="button" class="link-btn" id="btnSelectAllMixer">Chọn tất cả</button>
+                  <button type="button" class="link-btn" id="btnDeselectAllMixer">Bỏ chọn</button>
+                </div>
+              </div>
+              <div class="mixer-songs-list" id="mixerSongsList"></div>
+              <div class="mixer-modal-footer">
+                <span class="mixer-selected-count">Đã chọn: <strong id="mixerSelectedCountText">0</strong> bài</span>
+                <div style="display:flex;gap:8px;">
+                  <button type="button" class="icon-btn" id="btnCancelMixerModal">Hủy</button>
+                  <button type="button" class="btn-submit" id="btnConfirmMixerAdd" style="padding:8px 18px;">
+                    ➕ Thêm vào hàng đợi
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1075,6 +1151,7 @@
     }
     updateSkipVoteUI();
     updatePlayPauseButton();
+    updateMixerQueueVisibility();
   }
 
   function selectSeat(seatCode, silent = false) {
@@ -2772,6 +2849,274 @@
     state.queue.sort((a, b) => b.votes - a.votes);
   }
 
+
+  // =========================================================================
+  // SOLO VIEWER MIXER QUEUE ENGINE (Recommendations based on currently playing song)
+  // =========================================================================
+  function updateMixerQueueVisibility() {
+    const card = document.getElementById('soloMixerCard');
+    if (!card) return;
+    const totalOccupants = Object.keys(getOccupantMap()).length;
+    const isSolo = totalOccupants <= 1;
+
+    if (!isSolo) {
+      card.style.display = 'none';
+      const modal = document.getElementById('mixerPreviewModal');
+      if (modal && modal.classList.contains('open')) {
+        modal.classList.remove('open');
+      }
+      return;
+    }
+
+    card.style.display = 'block';
+
+    const trackTitleEl = document.getElementById('soloMixerSourceTitle');
+    const modalTrackEl = document.getElementById('modalMixerSourceSong');
+    let title = '';
+    if (state.currentVideo && state.currentVideo.videoId) {
+      title = state.currentVideo.title || `Video #${state.currentVideo.videoId}`;
+    } else if (state.queue && state.queue.length > 0) {
+      title = `Hàng đợi: ${state.queue[0].title}`;
+    } else {
+      title = 'Chưa có bài đang chiếu (Sẽ gợi ý nhạc hot mở màn)';
+    }
+
+    if (trackTitleEl) trackTitleEl.textContent = title;
+    if (modalTrackEl) modalTrackEl.textContent = title;
+  }
+
+  function getSoloMixerSource() {
+    if (state.currentVideo && state.currentVideo.videoId) {
+      return {
+        videoId: state.currentVideo.videoId,
+        title: state.currentVideo.title || ''
+      };
+    }
+    if (state.queue && state.queue.length > 0) {
+      return {
+        videoId: state.queue[0].videoId,
+        title: state.queue[0].title || ''
+      };
+    }
+    return {
+      videoId: 'Llw9Q6akRo4', // Sơn Tùng M-TP - Lạc Trôi as default high-vibe seed
+      title: 'Sơn Tùng M-TP - Lạc Trôi'
+    };
+  }
+
+  async function fetchMixerTracks(count = 5) {
+    const src = getSoloMixerSource();
+    const cleanCount = Math.min(20, Math.max(1, count));
+    let results = [];
+
+    // 1. Try server API /api/mixer-queue
+    try {
+      const resp = await fetch(`/api/mixer-queue?videoId=${encodeURIComponent(src.videoId)}&title=${encodeURIComponent(src.title)}&count=${cleanCount + 5}`, {
+        signal: AbortSignal.timeout(4800)
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data && Array.isArray(data.items) && data.items.length > 0) {
+          results = data.items;
+        }
+      }
+    } catch (_) {}
+
+    // 2. Client-side fallback if server API is unavailable or static hosting
+    if (results.length < cleanCount) {
+      const FALLBACK_CANDIDATES = [
+        { videoId: 'kJQP7kiw5Fk', title: 'Luis Fonsi - Despacito ft. Daddy Yankee', channel: 'Luis Fonsi', lengthSeconds: 282, lengthText: '4:42' },
+        { videoId: 'Pkh8UtuejGw', title: 'Shawn Mendes, Camila Cabello - Señorita', channel: 'Shawn Mendes', lengthSeconds: 206, lengthText: '3:26' },
+        { videoId: 'k2qgadSvNyU', title: 'Dua Lipa - New Rules (Official Music Video)', channel: 'Dua Lipa', lengthSeconds: 225, lengthText: '3:45' },
+        { videoId: 'JGwWNGJdvx8', title: 'Ed Sheeran - Shape of You', channel: 'Ed Sheeran', lengthSeconds: 264, lengthText: '4:24' },
+        { videoId: 'Llw9Q6akRo4', title: 'Sơn Tùng M-TP - Lạc Trôi', channel: 'Sơn Tùng M-TP Official', lengthSeconds: 273, lengthText: '4:33' },
+        { videoId: 'FN7ALfpGxiI', title: 'Sơn Tùng M-TP - Nơi Này Có Anh', channel: 'Sơn Tùng M-TP Official', lengthSeconds: 279, lengthText: '4:39' },
+        { videoId: 'dT2owtxkU8k', title: "Shawn Mendes - There's Nothing Holdin' Me Back", channel: 'Shawn Mendes', lengthSeconds: 238, lengthText: '3:58' },
+        { videoId: '3AtDnEC4zak', title: "Charlie Puth - We Don't Talk Anymore", channel: 'Charlie Puth', lengthSeconds: 231, lengthText: '3:51' },
+        { videoId: 'ioNng23DkIM', title: "BLACKPINK - 'How You Like That' M/V", channel: 'BLACKPINK', lengthSeconds: 184, lengthText: '3:04' },
+        { videoId: '2S24-y0Ij3Y', title: "BLACKPINK - 'Kill This Love' M/V", channel: 'BLACKPINK', lengthSeconds: 194, lengthText: '3:14' },
+        { videoId: 'qGRU3sRbaYw', title: 'Sơn Tùng M-TP - Chúng Ta Không Thuộc Về Nhau', channel: 'Sơn Tùng M-TP Official', lengthSeconds: 243, lengthText: '4:03' },
+        { videoId: 'papuvlVeZg8', title: 'Clean Bandit - Rockabye (feat. Sean Paul & Anne-Marie)', channel: 'Clean Bandit', lengthSeconds: 254, lengthText: '4:14' }
+      ];
+      for (const cand of FALLBACK_CANDIDATES) {
+        if (cand.videoId !== src.videoId && !results.some((r) => r.videoId === cand.videoId)) {
+          results.push({
+            ...cand,
+            thumbUrl: `https://i.ytimg.com/vi/${cand.videoId}/mqdefault.jpg`
+          });
+        }
+      }
+    }
+
+    // Filter out videos already in queue, current video, or duration > 8 minutes (480s)
+    const existingQueueIds = new Set((state.queue || []).map((q) => q.videoId));
+    if (state.currentVideo && state.currentVideo.videoId) {
+      existingQueueIds.add(state.currentVideo.videoId);
+    }
+
+    const filtered = results.filter((item) => {
+      if (!item || !item.videoId) return false;
+      if (existingQueueIds.has(item.videoId)) return false;
+      if (item.lengthSeconds && item.lengthSeconds > MAX_VIDEO_DURATION_SECONDS) return false;
+      return true;
+    });
+
+    return filtered.slice(0, cleanCount);
+  }
+
+  async function triggerAutoMixQueue(count = 5) {
+    const btn = document.getElementById('btnMixerAddNow');
+    const spinner = document.getElementById('smSpinner');
+    if (btn) btn.disabled = true;
+    if (spinner) spinner.style.display = 'inline';
+
+    showToast(`🔀 Đang tìm ${count} bài mọi người hay nghe cùng...`);
+
+    try {
+      const tracks = await fetchMixerTracks(count);
+      if (tracks.length === 0) {
+        showToast('⚠️ Không tìm thêm được bài liên quan chưa có trong hàng đợi.');
+        return;
+      }
+      await addMixedVideosToQueue(tracks);
+    } catch (err) {
+      showToast('⚠️ Lỗi khi trộn bài: ' + (err.message || 'Thử lại sau'));
+    } finally {
+      if (btn) btn.disabled = false;
+      if (spinner) spinner.style.display = 'none';
+    }
+  }
+
+  async function addMixedVideosToQueue(videos) {
+    if (!Array.isArray(videos) || videos.length === 0) return;
+
+    let addedCount = 0;
+    const itemsToAdd = [];
+
+    videos.forEach((v, idx) => {
+      if (state.queue.some((q) => q.videoId === v.videoId)) return;
+      if (v.lengthSeconds && v.lengthSeconds > MAX_VIDEO_DURATION_SECONDS) return;
+
+      const newItem = {
+        id: 'q-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6) + '-' + idx,
+        videoId: v.videoId,
+        title: v.title,
+        channel: v.channel || 'YouTube Creator',
+        addedBy: `🎧 Solo Mixer (${state.me.name})`,
+        addedByUserId: state.me.id,
+        addedByClientId: state.clientId,
+        lengthSeconds: v.lengthSeconds || null,
+        votes: 1,
+        ambilight: randomAmbilightPair()
+      };
+
+      state.localVotedSongIds.add(newItem.id);
+      state.queue.push(newItem);
+      itemsToAdd.push(newItem);
+      addedCount++;
+    });
+
+    if (addedCount > 0) {
+      saveLiveQueueToStorage();
+      renderQueue();
+      showToast(`🎉 Đã tự động mix thêm ${addedCount} bài nghe cùng vào hàng đợi!`);
+      showSeatSpeechBubble(state.me.seat, `Đã mix thêm ${addedCount} bài nghe cùng! 🎧`, 4200);
+      if (sfx && typeof sfx.playChatPop === 'function') sfx.playChatPop();
+
+      // Synchronize with server / peers
+      broadcastSync({ type: 'ADD_QUEUE_BATCH', items: itemsToAdd });
+      broadcastSync({ type: 'SYNC_QUEUE', queue: state.queue });
+
+      // If screen is currently empty, play next song right away!
+      const isScreenEmpty = !state.currentVideo || !state.currentVideo.videoId;
+      if (isScreenEmpty) {
+        playNextFromQueue('Chiếu ngay bài mở màn từ Solo Mixer');
+      }
+    } else {
+      showToast('⚡ Các bài này đều đã có trong danh sách hàng đợi rồi.');
+    }
+  }
+
+  // Mixer Preview Modal Logic
+  async function openMixerPreviewModal() {
+    const modal = document.getElementById('mixerPreviewModal');
+    const listEl = document.getElementById('mixerSongsList');
+    const countText = document.getElementById('mixerSelectedCountText');
+    if (!modal || !listEl) return;
+
+    modal.classList.add('open');
+    updateMixerQueueVisibility();
+
+    listEl.innerHTML = `
+      <div style="text-align:center;padding:24px;color:var(--text-secondary);font-size:0.8rem;">
+        ⏳ Đang tải những bài mọi người hay nghe cùng...
+      </div>
+    `;
+
+    const tracks = await fetchMixerTracks(12);
+    state.mixerRecommendations = tracks;
+
+    if (tracks.length === 0) {
+      listEl.innerHTML = `
+        <div style="text-align:center;padding:24px;color:var(--text-secondary);font-size:0.8rem;">
+          Đã có đủ các bài gợi ý trong danh sách hàng đợi rồi!
+        </div>
+      `;
+      if (countText) countText.textContent = '0';
+      return;
+    }
+
+    const defaultSelectCount = Math.min(state.mixerCount || 5, tracks.length);
+    listEl.innerHTML = tracks
+      .map((t, idx) => {
+        const isChecked = idx < defaultSelectCount;
+        const thumb = t.thumbUrl || `https://i.ytimg.com/vi/${t.videoId}/mqdefault.jpg`;
+        return `
+          <div class="mixer-song-item ${isChecked ? 'selected' : ''}" data-idx="${idx}">
+            <input type="checkbox" class="mixer-checkbox" data-idx="${idx}" ${isChecked ? 'checked' : ''} />
+            <div class="mixer-thumb-wrap">
+              <img src="${thumb}" alt="${escapeHtml(t.title)}" loading="lazy" />
+            </div>
+            <div class="mixer-info-wrap">
+              <div class="mixer-song-title" title="${escapeHtml(t.title)}">${escapeHtml(t.title)}</div>
+              <div class="mixer-song-channel">${escapeHtml(t.channel)}</div>
+            </div>
+            <span class="mixer-len-badge">${t.lengthText || '3:30'}</span>
+          </div>
+        `;
+      })
+      .join('');
+
+    const updateSelectedSummary = () => {
+      const checkedBoxes = listEl.querySelectorAll('.mixer-checkbox:checked');
+      if (countText) countText.textContent = checkedBoxes.length;
+    };
+    updateSelectedSummary();
+
+    listEl.querySelectorAll('.mixer-song-item').forEach((itemEl) => {
+      itemEl.addEventListener('click', (e) => {
+        if (e.target.tagName.toLowerCase() !== 'input') {
+          const cb = itemEl.querySelector('.mixer-checkbox');
+          if (cb) {
+            cb.checked = !cb.checked;
+            itemEl.classList.toggle('selected', cb.checked);
+            updateSelectedSummary();
+          }
+        }
+      });
+      const cb = itemEl.querySelector('.mixer-checkbox');
+      cb?.addEventListener('change', () => {
+        itemEl.classList.toggle('selected', cb.checked);
+        updateSelectedSummary();
+      });
+    });
+  }
+
+  function closeMixerPreviewModal() {
+    const modal = document.getElementById('mixerPreviewModal');
+    if (modal) modal.classList.remove('open');
+  }
+
   function renderQueue() {
     sortQueue();
     updateNextPlayingUI();
@@ -2779,6 +3124,7 @@
     const badgeEl = document.getElementById('queueCountBadge');
     if (badgeEl) badgeEl.textContent = state.queue.length;
     updateSkipVoteUI();
+    updateMixerQueueVisibility();
     if (!listEl) return;
 
     if (state.queue.length === 0) {
@@ -3665,9 +4011,18 @@
         break;
 
       case 'ADD_QUEUE':
+      case 'ADD_QUEUE_BATCH':
       case 'QUEUE_UPDATE':
         if (Array.isArray(data.queue)) {
           state.queue = data.queue;
+          renderQueue();
+          updateSkipVoteUI();
+        } else if (Array.isArray(data.items)) {
+          data.items.forEach((it) => {
+            if (it && !state.queue.some((q) => q.id === it.id)) {
+              state.queue.push({ ...it });
+            }
+          });
           renderQueue();
           updateSkipVoteUI();
         } else if (data.item && !state.queue.some((q) => q.id === data.item.id)) {
@@ -4925,6 +5280,64 @@
       if (e.target.id === 'unavailableVideoModal') {
         hideUnavailableVideoPopup();
       }
+    });
+
+
+    // Solo Viewer Mixer Queue Controls & Modal Events
+    document.querySelectorAll('#smCountPills .sm-pill-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#smCountPills .sm-pill-btn').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.mixerCount = parseInt(btn.dataset.count || '5', 10);
+        const lbl = document.getElementById('smAddCountLabel');
+        if (lbl) lbl.textContent = state.mixerCount;
+      });
+    });
+
+    document.getElementById('btnMixerAddNow')?.addEventListener('click', () => {
+      triggerAutoMixQueue(state.mixerCount || 5);
+    });
+
+    document.getElementById('btnOpenMixerPreview')?.addEventListener('click', openMixerPreviewModal);
+    document.getElementById('btnCloseMixerModal')?.addEventListener('click', closeMixerPreviewModal);
+    document.getElementById('btnCancelMixerModal')?.addEventListener('click', closeMixerPreviewModal);
+    document.getElementById('mixerPreviewModal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'mixerPreviewModal') closeMixerPreviewModal();
+    });
+
+    document.getElementById('btnSelectAllMixer')?.addEventListener('click', () => {
+      const listEl = document.getElementById('mixerSongsList');
+      if (!listEl) return;
+      listEl.querySelectorAll('.mixer-checkbox').forEach((cb) => {
+        cb.checked = true;
+        cb.closest('.mixer-song-item')?.classList.add('selected');
+      });
+      const countText = document.getElementById('mixerSelectedCountText');
+      if (countText) countText.textContent = listEl.querySelectorAll('.mixer-checkbox').length;
+    });
+
+    document.getElementById('btnDeselectAllMixer')?.addEventListener('click', () => {
+      const listEl = document.getElementById('mixerSongsList');
+      if (!listEl) return;
+      listEl.querySelectorAll('.mixer-checkbox').forEach((cb) => {
+        cb.checked = false;
+        cb.closest('.mixer-song-item')?.classList.remove('selected');
+      });
+      const countText = document.getElementById('mixerSelectedCountText');
+      if (countText) countText.textContent = '0';
+    });
+
+    document.getElementById('btnConfirmMixerAdd')?.addEventListener('click', async () => {
+      const listEl = document.getElementById('mixerSongsList');
+      if (!listEl || !state.mixerRecommendations) return;
+      const checkedBoxes = Array.from(listEl.querySelectorAll('.mixer-checkbox:checked'));
+      if (checkedBoxes.length === 0) {
+        showToast('⚠️ Vui lòng chọn ít nhất 1 bài để thêm vào hàng đợi.');
+        return;
+      }
+      const selectedTracks = checkedBoxes.map((cb) => state.mixerRecommendations[parseInt(cb.dataset.idx, 10)]).filter(Boolean);
+      closeMixerPreviewModal();
+      await addMixedVideosToQueue(selectedTracks);
     });
 
     // Video Duration Limit Modal Events

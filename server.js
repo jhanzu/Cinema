@@ -196,6 +196,154 @@ function advanceRoomQueue(reasonText) {
 // =============================================================================
 // HTTP STATIC SERVER + REST API
 // =============================================================================
+
+// =========================================================================
+// SOLO VIEWER MIXER QUEUE ENGINE (Songs people listen to together)
+// =========================================================================
+const mixerCache = new Map();
+
+async function fetchMixerQueue(videoId, songTitle, count = 5) {
+  const MAX_DURATION = 480; // 8 minutes limit strictly enforced
+  const cleanCount = Math.min(20, Math.max(1, count));
+  const cacheKey = `${videoId || ''}-${songTitle || ''}-${cleanCount}`;
+  if (mixerCache.has(cacheKey)) {
+    const cached = mixerCache.get(cacheKey);
+    if (Date.now() - cached.time < 3600000) {
+      return cached.items;
+    }
+  }
+
+  let items = [];
+
+  // Strategy 1: YouTube RD Mix (YouTube's algorithm for songs people listen to together)
+  if (videoId) {
+    try {
+      const mixUrl = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}&list=RD${encodeURIComponent(videoId)}`;
+      const resp = await fetch(mixUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept-Language': 'vi,en;q=0.9'
+        },
+        signal: AbortSignal.timeout(4500)
+      });
+      const html = await resp.text();
+      const jsonMatch = html.match(/var ytInitialData = ({.*?});<\/script>/s) || html.match(/ytInitialData\s*=\s*({.+?});/);
+      if (jsonMatch) {
+        const data = JSON.parse(jsonMatch[1]);
+        function traverse(obj) {
+          if (!obj || typeof obj !== 'object') return;
+          if (obj.playlistPanelVideoRenderer) {
+            const r = obj.playlistPanelVideoRenderer;
+            const vId = r.videoId;
+            const title = r.title?.simpleText || r.title?.runs?.[0]?.text;
+            const channel = r.shortBylineText?.simpleText || r.shortBylineText?.runs?.[0]?.text;
+            const lengthText = r.lengthText?.simpleText;
+            let lengthSeconds = 0;
+            if (lengthText) {
+              const parts = lengthText.split(':').map(Number);
+              if (parts.length === 2) lengthSeconds = parts[0] * 60 + parts[1];
+              else if (parts.length === 3) lengthSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+            }
+            if (vId && vId !== videoId && title && (!lengthSeconds || lengthSeconds <= MAX_DURATION)) {
+              if (!items.some((it) => it.videoId === vId)) {
+                items.push({
+                  videoId: vId,
+                  title: String(title).replace(/&amp;/g, '&'),
+                  channel: String(channel || 'YouTube Creator').replace(/&amp;/g, '&'),
+                  lengthSeconds,
+                  lengthText: lengthText || '3:30',
+                  thumbUrl: `https://i.ytimg.com/vi/${vId}/mqdefault.jpg`
+                });
+              }
+            }
+          }
+          for (const k of Object.keys(obj)) traverse(obj[k]);
+        }
+        traverse(data);
+      }
+    } catch (_) {}
+  }
+
+  // Strategy 2: YouTube Search Fallback
+  if (items.length < cleanCount && songTitle) {
+    try {
+      const q = songTitle.replace(/\(.*?\)|\[.*?\]/g, '').trim() + ' official music audio';
+      const sUrl = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
+      const resp = await fetch(sUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept-Language': 'vi,en;q=0.9'
+        },
+        signal: AbortSignal.timeout(4500)
+      });
+      const html = await resp.text();
+      const jsonMatch = html.match(/var ytInitialData = ({.*?});<\/script>/s) || html.match(/ytInitialData\s*=\s*({.+?});/);
+      if (jsonMatch) {
+        const data = JSON.parse(jsonMatch[1]);
+        function traverseSearch(obj) {
+          if (!obj || typeof obj !== 'object') return;
+          if (obj.videoRenderer) {
+            const r = obj.videoRenderer;
+            const vId = r.videoId;
+            const title = r.title?.runs?.[0]?.text || r.title?.simpleText;
+            const channel = r.ownerText?.runs?.[0]?.text || r.shortBylineText?.runs?.[0]?.text;
+            const lengthText = r.lengthText?.simpleText;
+            let lengthSeconds = 0;
+            if (lengthText) {
+              const parts = lengthText.split(':').map(Number);
+              if (parts.length === 2) lengthSeconds = parts[0] * 60 + parts[1];
+              else if (parts.length === 3) lengthSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+            }
+            if (vId && vId !== videoId && title && (!lengthSeconds || lengthSeconds <= MAX_DURATION)) {
+              if (!items.some((it) => it.videoId === vId)) {
+                items.push({
+                  videoId: vId,
+                  title: String(title).replace(/&amp;/g, '&'),
+                  channel: String(channel || 'YouTube Creator').replace(/&amp;/g, '&'),
+                  lengthSeconds,
+                  lengthText: lengthText || '3:30',
+                  thumbUrl: `https://i.ytimg.com/vi/${vId}/mqdefault.jpg`
+                });
+              }
+            }
+          }
+          for (const k of Object.keys(obj)) traverseSearch(obj[k]);
+        }
+        traverseSearch(data);
+      }
+    } catch (_) {}
+  }
+
+  // Strategy 3: Preset fallbacks under 8 minutes
+  if (items.length < cleanCount) {
+    const PRESET_FALLBACKS = [
+      { videoId: 'kJQP7kiw5Fk', title: 'Luis Fonsi - Despacito ft. Daddy Yankee', channel: 'Luis Fonsi', lengthSeconds: 282, lengthText: '4:42' },
+      { videoId: 'Pkh8UtuejGw', title: 'Shawn Mendes, Camila Cabello - Señorita', channel: 'Shawn Mendes', lengthSeconds: 206, lengthText: '3:26' },
+      { videoId: 'k2qgadSvNyU', title: 'Dua Lipa - New Rules (Official Music Video)', channel: 'Dua Lipa', lengthSeconds: 225, lengthText: '3:45' },
+      { videoId: 'JGwWNGJdvx8', title: 'Ed Sheeran - Shape of You', channel: 'Ed Sheeran', lengthSeconds: 264, lengthText: '4:24' },
+      { videoId: 'Llw9Q6akRo4', title: 'Sơn Tùng M-TP - Lạc Trôi', channel: 'Sơn Tùng M-TP Official', lengthSeconds: 273, lengthText: '4:33' },
+      { videoId: 'FN7ALfpGxiI', title: 'Sơn Tùng M-TP - Nơi Này Có Anh', channel: 'Sơn Tùng M-TP Official', lengthSeconds: 279, lengthText: '4:39' },
+      { videoId: 'dT2owtxkU8k', title: "Shawn Mendes - There's Nothing Holdin' Me Back", channel: 'Shawn Mendes', lengthSeconds: 238, lengthText: '3:58' },
+      { videoId: '3AtDnEC4zak', title: "Charlie Puth - We Don't Talk Anymore", channel: 'Charlie Puth', lengthSeconds: 231, lengthText: '3:51' },
+      { videoId: 'ioNng23DkIM', title: "BLACKPINK - 'How You Like That' M/V", channel: 'BLACKPINK', lengthSeconds: 184, lengthText: '3:04' },
+      { videoId: '2S24-y0Ij3Y', title: "BLACKPINK - 'Kill This Love' M/V", channel: 'BLACKPINK', lengthSeconds: 194, lengthText: '3:14' }
+    ];
+    for (const fb of PRESET_FALLBACKS) {
+      if (fb.videoId !== videoId && !items.some((it) => it.videoId === fb.videoId)) {
+        items.push({
+          ...fb,
+          thumbUrl: `https://i.ytimg.com/vi/${fb.videoId}/mqdefault.jpg`
+        });
+      }
+      if (items.length >= cleanCount) break;
+    }
+  }
+
+  const finalItems = items.slice(0, cleanCount);
+  mixerCache.set(cacheKey, { items: finalItems, time: Date.now() });
+  return finalItems;
+}
+
 const server = http.createServer(async (req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = decodeURIComponent(parsedUrl.pathname);
@@ -252,6 +400,29 @@ const server = http.createServer(async (req, res) => {
       }));
     } catch (err) {
       return res.end(JSON.stringify({ videoId: vid, lengthSeconds: null, error: err.message }));
+    }
+  }
+
+
+  // API: Mixer Queue for Solo Viewer (Songs people listen to together)
+  if (pathname === '/api/mixer-queue') {
+    const vid = parsedUrl.searchParams.get('videoId') || parsedUrl.searchParams.get('id') || '';
+    const title = parsedUrl.searchParams.get('title') || '';
+    const count = Math.min(20, Math.max(1, parseInt(parsedUrl.searchParams.get('count') || '5', 10)));
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=UTF-8',
+      'Access-Control-Allow-Origin': '*'
+    });
+    try {
+      const items = await fetchMixerQueue(vid, title, count);
+      return res.end(JSON.stringify({
+        success: true,
+        sourceVideoId: vid,
+        count: items.length,
+        items
+      }));
+    } catch (err) {
+      return res.end(JSON.stringify({ success: false, error: err.message, items: [] }));
     }
   }
 
@@ -630,6 +801,35 @@ function handleClientMessage(ws, data) {
         emoji: data.emoji || '🍿',
         userId: user.id
       });
+      break;
+    }
+
+
+    case 'ADD_QUEUE_BATCH': {
+      if (!Array.isArray(data.items) || data.items.length === 0) return;
+      let addedAny = false;
+      for (const item of data.items) {
+        if (!item || !item.videoId) continue;
+        if (item.lengthSeconds && item.lengthSeconds > 480) continue;
+        if (!roomState.queue.some((q) => q.videoId === item.videoId || q.id === item.id)) {
+          roomState.queue.push({
+            ...item,
+            addedByUserId: item.addedByUserId || ws.userId || null,
+            addedByClientId: item.addedByClientId || null
+          });
+          addedAny = true;
+        }
+      }
+      if (addedAny) {
+        if (!roomState.currentVideo || !roomState.currentVideo.videoId) {
+          advanceRoomQueue('Chiếu ngay video mở màn từ Solo Mixer');
+        } else {
+          broadcast({
+            type: 'QUEUE_UPDATE',
+            queue: roomState.queue
+          });
+        }
+      }
       break;
     }
 
