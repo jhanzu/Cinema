@@ -2343,7 +2343,7 @@
         probeDiv.style.cssText = 'position:fixed;width:240px;height:160px;left:-9999px;top:-9999px;opacity:0.01;pointer-events:none;z-index:-999;';
         document.body.appendChild(probeDiv);
       }
-      // Clean up any stale or zombie probe iframes before creating a new one
+      // Clean up any stale probe iframes before creating a new one
       probeDiv.innerHTML = '';
 
       const probeTargetId = 'probe_yt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
@@ -2353,21 +2353,14 @@
 
       let settled = false;
       let probePlayerInstance = null;
-      let checkTimer = null;
       let safetyTimer = null;
 
       function getReasonForErrorCode(errCode) {
-        if (errCode === 150 || errCode === 101) {
-          return 'Chủ sở hữu video hoặc YouTube không cho phép phát video này trên website bên ngoài (Chặn nhúng bản quyền hoặc giới hạn khu vực).';
-        }
         if (errCode === 100) {
           return 'Link video YouTube này không tồn tại, đã bị tác giả xóa hoặc đặt ở chế độ riêng tư (Unavailable).';
         }
         if (errCode === 2) {
           return 'Đường link hoặc ID video YouTube này không đúng định dạng.';
-        }
-        if (errCode === 5) {
-          return 'Không thể phát nội dung này trong trình phát HTML5 của trình duyệt.';
         }
         return 'Video này hiện không thể phát được trong rạp chiếu do hạn chế từ YouTube.';
       }
@@ -2375,9 +2368,7 @@
       const cleanup = () => {
         if (settled) return;
         settled = true;
-        if (checkTimer) { clearTimeout(checkTimer); checkTimer = null; }
         if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = null; }
-        window.removeEventListener('message', onMessageProbe);
         try {
           if (probePlayerInstance && typeof probePlayerInstance.destroy === 'function') {
             probePlayerInstance.destroy();
@@ -2392,27 +2383,7 @@
         }
       };
 
-      // Direct postMessage listener strictly bound to this probe's own iframe window
-      const onMessageProbe = (e) => {
-        if (settled) return;
-        try {
-          const actualIfr = document.getElementById(probeTargetId);
-          // Strictly ignore any messages not from this exact probe iframe
-          if (!actualIfr || e.source !== actualIfr.contentWindow) {
-            return;
-          }
-          const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-          if (data && data.event === 'onError') {
-            const errCode = (typeof data.info === 'number') ? data.info : 150;
-            const reason = getReasonForErrorCode(errCode);
-            cleanup();
-            resolve({ playable: false, errorCode: errCode, reason });
-          }
-        } catch (_) {}
-      };
-      window.addEventListener('message', onMessageProbe);
-
-      // Safety timeout: If after 1.8 seconds no error was reported, assume playable
+      // Safety timeout: If by 1500ms no error occurred, assume playable
       safetyTimer = setTimeout(() => {
         if (settled) return;
         let dur = null;
@@ -2423,64 +2394,43 @@
         } catch (_) {}
         cleanup();
         resolve({ playable: true, duration: (dur && dur > 0) ? dur : null, errorCode: null });
-      }, 1800);
+      }, 1500);
 
       try {
         probePlayerInstance = new window.YT.Player(probeTargetId, {
           videoId,
+          host: 'https://www.youtube-nocookie.com',
           playerVars: {
-            autoplay: 1,
-            mute: 1,
+            autoplay: 0,
             controls: 0,
-            playsinline: 1,
             disablekb: 1,
             fs: 0,
             rel: 0,
-            origin: window.location.origin
+            widget_referrer: 'https://www.youtube.com/'
           },
           events: {
             onReady: (e) => {
               if (settled) return;
               try {
-                e.target.mute();
-                e.target.playVideo();
-              } catch (_) {}
-
-              // Allow 600ms to verify playback status
-              checkTimer = setTimeout(() => {
-                if (settled) return;
-                try {
-                  const pState = e.target.getPlayerState ? e.target.getPlayerState() : -1;
-                  const dur = e.target.getDuration ? e.target.getDuration() : 0;
-                  if (pState === 1 || pState === 3 || dur > 0) {
-                    try { e.target.pauseVideo(); } catch (_) {}
-                    cleanup();
-                    return resolve({ playable: true, duration: dur > 0 ? dur : null, errorCode: null });
-                  }
-                } catch (_) {}
-              }, 600);
-            },
-            onStateChange: (e) => {
-              if (settled) return;
-              // 1 = PLAYING, 3 = BUFFERING
-              if (e.data === 1 || e.data === 3) {
-                try {
-                  const dur = e.target.getDuration ? e.target.getDuration() : 0;
-                  try { e.target.pauseVideo(); } catch (_) {}
-                  cleanup();
-                  resolve({ playable: true, duration: (dur && dur > 0) ? dur : null, errorCode: null });
-                } catch (_) {
-                  cleanup();
-                  resolve({ playable: true, duration: null, errorCode: null });
-                }
+                const dur = e.target.getDuration ? e.target.getDuration() : 0;
+                cleanup();
+                return resolve({ playable: true, duration: dur > 0 ? dur : null, errorCode: null });
+              } catch (_) {
+                cleanup();
+                return resolve({ playable: true, duration: null, errorCode: null });
               }
             },
             onError: (e) => {
               if (settled) return;
               const errCode = (e && typeof e.data === 'number') ? e.data : 150;
-              const reason = getReasonForErrorCode(errCode);
+              // Code 100: video not found, deleted, or private. Code 2: invalid syntax.
+              if (errCode === 100 || errCode === 2) {
+                const reason = getReasonForErrorCode(errCode);
+                cleanup();
+                return resolve({ playable: false, errorCode: errCode, reason });
+              }
               cleanup();
-              return resolve({ playable: false, duration: null, errorCode: errCode, reason });
+              return resolve({ playable: true, errorCode: errCode });
             }
           }
         });
@@ -3599,28 +3549,32 @@
       }
     }
 
-    // 2. Immediate playability probe via client YouTube player (catches embed blocked 150/101 & 18+ content)
-    try {
-      const probeResult = await probeYouTubePlayability(videoId);
-      if (probeResult && probeResult.playable === false) {
-        failedVideoIds.add(videoId);
-        state.queue = (state.queue || []).filter((q) => q.videoId !== videoId);
-        renderQueue();
-        saveLiveQueueToStorage();
-        showUnavailableVideoPopup(
-          title || `ID: ${videoId}`,
-          probeResult.reason || 'Chủ sở hữu video hoặc YouTube không cho phép phát video này trên website bên ngoài (Chặn nhúng bản quyền hoặc giới hạn khu vực).',
-          () => {
-            const input = document.getElementById('inputYoutubeUrl');
-            if (input) { input.value = ''; input.focus(); }
-          }
-        );
-        return;
-      }
-      if (lengthSeconds === null && probeResult && probeResult.duration) {
-        lengthSeconds = Math.round(probeResult.duration);
-      }
-    } catch (_) {}
+    // 2. Fallback probe duration if length is not yet known from server/oEmbed
+    if (lengthSeconds === null || lengthSeconds === undefined) {
+      try {
+        const probeResult = await probeYouTubePlayability(videoId);
+        if (probeResult && probeResult.playable === false && (!title || title.includes(videoId))) {
+          failedVideoIds.add(videoId);
+          state.queue = (state.queue || []).filter((q) => q.videoId !== videoId);
+          renderQueue();
+          saveLiveQueueToStorage();
+          showUnavailableVideoPopup(
+            title || `ID: ${videoId}`,
+            probeResult.reason || 'Link video YouTube này không tồn tại, đã bị tác giả xóa hoặc đặt ở chế độ riêng tư (Unavailable).',
+            () => {
+              const input = document.getElementById('inputYoutubeUrl');
+              if (input) { input.value = ''; input.focus(); }
+            }
+          );
+          const input = document.getElementById('inputYoutubeUrl');
+          if (input) input.value = '';
+          return;
+        }
+        if (probeResult && probeResult.duration) {
+          lengthSeconds = Math.round(probeResult.duration);
+        }
+      } catch (_) {}
+    }
 
     // STRICT 8-MINUTE DURATION LIMIT CHECK (<= 480 seconds)
     if (lengthSeconds && lengthSeconds > MAX_VIDEO_DURATION_SECONDS) {
