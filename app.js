@@ -4889,20 +4889,99 @@
       }
     }
 
+    function isScreenFullscreen() {
+      const frame = document.getElementById('cinemaScreenFrame');
+      return !!(
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        (frame && frame.classList.contains('is-fullscreen'))
+      );
+    }
+
     function toggleFullscreen() {
-      const vp = document.getElementById('cinemaViewport') || document.documentElement;
-      if (!document.fullscreenElement) {
-        if (vp.requestFullscreen) vp.requestFullscreen();
-        else if (vp.webkitRequestFullscreen) vp.webkitRequestFullscreen();
+      const frame = document.getElementById('cinemaScreenFrame') || document.documentElement;
+      const isFs = isScreenFullscreen();
+
+      if (!isFs) {
+        // Enter Fullscreen on Cinema Screen Frame
+        if (frame.requestFullscreen) {
+          frame.requestFullscreen().catch(() => {
+            enterPseudoFullscreen(frame);
+          });
+        } else if (frame.webkitRequestFullscreen) {
+          frame.webkitRequestFullscreen();
+        } else {
+          enterPseudoFullscreen(frame);
+        }
+
+        try {
+          if (screen.orientation && typeof screen.orientation.lock === 'function') {
+            screen.orientation.lock('landscape').catch(() => {});
+          }
+        } catch (_) {}
+
+        frame.classList.add('is-fullscreen');
+        document.body.classList.add('cinema-screen-is-fullscreen');
+        updateFullscreenIcons(true);
+        showToast('⛶ Đã phóng to toàn bộ màn chiếu');
       } else {
-        if (document.exitFullscreen) document.exitFullscreen();
-        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        // Exit Fullscreen
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+          if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+          else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        }
+        exitPseudoFullscreen(frame);
+
+        try {
+          if (screen.orientation && typeof screen.orientation.unlock === 'function') {
+            screen.orientation.unlock();
+          }
+        } catch (_) {}
+
+        frame.classList.remove('is-fullscreen');
+        document.body.classList.remove('cinema-screen-is-fullscreen');
+        updateFullscreenIcons(false);
+        showToast('Thu nhỏ về chế độ phòng rạp 3D');
       }
     }
 
-    document.addEventListener('fullscreenchange', () => {
+    function enterPseudoFullscreen(frame) {
+      if (frame) frame.classList.add('is-fullscreen');
+      document.body.classList.add('cinema-screen-is-fullscreen');
+      updateFullscreenIcons(true);
+    }
+
+    function exitPseudoFullscreen(frame) {
+      if (frame) frame.classList.remove('is-fullscreen');
+      document.body.classList.remove('cinema-screen-is-fullscreen');
+      updateFullscreenIcons(false);
+    }
+
+    function updateFullscreenIcons(isFs) {
       const icon = document.getElementById('screenFsIcon');
-      if (icon) icon.textContent = document.fullscreenElement ? '✕' : '⛶';
+      if (icon) icon.textContent = isFs ? '✕' : '⛶';
+      const btn = document.getElementById('btnScreenFullscreen');
+      if (btn) btn.title = isFs ? 'Thu nhỏ màn chiếu (Phím F hoặc Esc)' : 'Phóng to toàn bộ màn chiếu cho máy tính / điện thoại (Phím F)';
+    }
+
+    document.addEventListener('fullscreenchange', () => {
+      const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+      const frame = document.getElementById('cinemaScreenFrame');
+      if (!isFs && frame) {
+        frame.classList.remove('is-fullscreen');
+        document.body.classList.remove('cinema-screen-is-fullscreen');
+      }
+      updateFullscreenIcons(isFs);
+    });
+
+    document.addEventListener('webkitfullscreenchange', () => {
+      const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+      const frame = document.getElementById('cinemaScreenFrame');
+      if (!isFs && frame) {
+        frame.classList.remove('is-fullscreen');
+        document.body.classList.remove('cinema-screen-is-fullscreen');
+      }
+      updateFullscreenIcons(isFs);
     });
 
     let rippleTimer = null;
@@ -5826,6 +5905,10 @@
       }
 
       if (e.key === 'Escape') {
+        if (isScreenFullscreen()) {
+          toggleFullscreen();
+          return;
+        }
         closeProfile();
       } else if (e.key === 'c' || e.key === 'C') {
         e.preventDefault();
