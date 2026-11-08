@@ -198,6 +198,119 @@ function advanceRoomQueue(reasonText) {
 // =============================================================================
 
 // =========================================================================
+// REAL YOUTUBE WEB CLIENT EMULATION & INNERTUBE API ENGINE
+// =========================================================================
+const YT_COMMON_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+  'Accept-Language': 'vi,en;q=0.9',
+  'Origin': 'https://www.youtube.com',
+  'Referer': 'https://www.youtube.com/',
+  'X-YouTube-Client-Name': '1',
+  'X-YouTube-Client-Version': '2.20240913.01.00',
+  'sec-ch-ua': '"Chromium";v="128", "Not;A=Brand";v="24", "Google Chrome";v="128"',
+  'sec-ch-ua-mobile': '?0',
+  'sec-ch-ua-platform': '"Windows"'
+};
+
+async function fetchInnerTubePlayer(videoId) {
+  try {
+    const res = await fetch('https://www.youtube.com/youtubei/v1/player', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...YT_COMMON_HEADERS
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'WEB',
+            clientVersion: '2.20240913.01.00',
+            hl: 'vi',
+            gl: 'VN'
+          }
+        },
+        videoId
+      }),
+      signal: AbortSignal.timeout(4000)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.videoDetails) {
+        const d = data.videoDetails;
+        return {
+          title: d.title || '',
+          channel: d.author || 'YouTube Creator',
+          lengthSeconds: d.lengthSeconds ? parseInt(d.lengthSeconds, 10) : null,
+          isLive: !!d.isLiveContent,
+          available: true
+        };
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
+async function fetchInnerTubeSearch(query, excludeId = '', maxDuration = 480) {
+  try {
+    const res = await fetch('https://www.youtube.com/youtubei/v1/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...YT_COMMON_HEADERS
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'WEB',
+            clientVersion: '2.20240913.01.00',
+            hl: 'vi',
+            gl: 'VN'
+          }
+        },
+        query
+      }),
+      signal: AbortSignal.timeout(4500)
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const results = [];
+    function traverse(obj) {
+      if (!obj || typeof obj !== 'object') return;
+      if (obj.videoRenderer) {
+        const v = obj.videoRenderer;
+        const vId = v.videoId;
+        const title = v.title?.runs?.[0]?.text || v.title?.simpleText;
+        const channel = v.ownerText?.runs?.[0]?.text || v.shortBylineText?.runs?.[0]?.text;
+        const lengthText = v.lengthText?.simpleText;
+        let lengthSeconds = 0;
+        if (lengthText) {
+          const parts = lengthText.split(':').map(Number);
+          if (parts.length === 2) lengthSeconds = parts[0] * 60 + parts[1];
+          else if (parts.length === 3) lengthSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+        }
+        if (vId && vId !== excludeId && title && (!lengthSeconds || lengthSeconds <= maxDuration)) {
+          if (!results.some(r => r.videoId === vId)) {
+            results.push({
+              videoId: vId,
+              title: String(title).replace(/&amp;/g, '&'),
+              channel: String(channel || 'YouTube Creator').replace(/&amp;/g, '&'),
+              lengthSeconds,
+              lengthText: lengthText || '3:30',
+              thumbUrl: `https://i.ytimg.com/vi/${vId}/mqdefault.jpg`
+            });
+          }
+        }
+      }
+      for (const k of Object.keys(obj)) traverse(obj[k]);
+    }
+    traverse(data);
+    return results;
+  } catch (_) {
+    return [];
+  }
+}
+
+// =========================================================================
 // SOLO VIEWER MIXER QUEUE ENGINE (Songs people listen to together)
 // =========================================================================
 const mixerCache = new Map();
@@ -215,15 +328,24 @@ async function fetchMixerQueue(videoId, songTitle, count = 5) {
 
   let items = [];
 
-  // Strategy 1: YouTube RD Mix (YouTube's algorithm for songs people listen to together)
-  if (videoId) {
+  // Strategy 1: InnerTube search for mix / related songs (Authentic YouTube recommendations)
+  if (songTitle || videoId) {
+    const q = (songTitle || '').replace(/\(.*?\)|\[.*?\]/g, '').trim() + ' mix';
+    const itResults = await fetchInnerTubeSearch(q, videoId, MAX_DURATION);
+    for (const it of itResults) {
+      if (!items.some(x => x.videoId === it.videoId)) {
+        items.push(it);
+      }
+      if (items.length >= cleanCount) break;
+    }
+  }
+
+  // Strategy 2: YouTube RD Mix (YouTube's algorithm for songs people listen to together)
+  if (items.length < cleanCount && videoId) {
     try {
       const mixUrl = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}&list=RD${encodeURIComponent(videoId)}`;
       const resp = await fetch(mixUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept-Language': 'vi,en;q=0.9'
-        },
+        headers: YT_COMMON_HEADERS,
         signal: AbortSignal.timeout(4500)
       });
       const html = await resp.text();
@@ -264,56 +386,6 @@ async function fetchMixerQueue(videoId, songTitle, count = 5) {
     } catch (_) {}
   }
 
-  // Strategy 2: YouTube Search Fallback
-  if (items.length < cleanCount && songTitle) {
-    try {
-      const q = songTitle.replace(/\(.*?\)|\[.*?\]/g, '').trim() + ' official music audio';
-      const sUrl = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
-      const resp = await fetch(sUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept-Language': 'vi,en;q=0.9'
-        },
-        signal: AbortSignal.timeout(4500)
-      });
-      const html = await resp.text();
-      const jsonMatch = html.match(/var ytInitialData = ({.*?});<\/script>/s) || html.match(/ytInitialData\s*=\s*({.+?});/);
-      if (jsonMatch) {
-        const data = JSON.parse(jsonMatch[1]);
-        function traverseSearch(obj) {
-          if (!obj || typeof obj !== 'object') return;
-          if (obj.videoRenderer) {
-            const r = obj.videoRenderer;
-            const vId = r.videoId;
-            const title = r.title?.runs?.[0]?.text || r.title?.simpleText;
-            const channel = r.ownerText?.runs?.[0]?.text || r.shortBylineText?.runs?.[0]?.text;
-            const lengthText = r.lengthText?.simpleText;
-            let lengthSeconds = 0;
-            if (lengthText) {
-              const parts = lengthText.split(':').map(Number);
-              if (parts.length === 2) lengthSeconds = parts[0] * 60 + parts[1];
-              else if (parts.length === 3) lengthSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
-            }
-            if (vId && vId !== videoId && title && (!lengthSeconds || lengthSeconds <= MAX_DURATION)) {
-              if (!items.some((it) => it.videoId === vId)) {
-                items.push({
-                  videoId: vId,
-                  title: String(title).replace(/&amp;/g, '&'),
-                  channel: String(channel || 'YouTube Creator').replace(/&amp;/g, '&'),
-                  lengthSeconds,
-                  lengthText: lengthText || '3:30',
-                  thumbUrl: `https://i.ytimg.com/vi/${vId}/mqdefault.jpg`
-                });
-              }
-            }
-          }
-          for (const k of Object.keys(obj)) traverseSearch(obj[k]);
-        }
-        traverseSearch(data);
-      }
-    } catch (_) {}
-  }
-
   // Strategy 3: Preset fallbacks under 8 minutes
   if (items.length < cleanCount) {
     const PRESET_FALLBACKS = [
@@ -348,7 +420,7 @@ const server = http.createServer(async (req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = decodeURIComponent(parsedUrl.pathname);
 
-  // API: Search alternative YouTube videos for embed-blocked songs
+  // API: Search alternative YouTube videos for embed-blocked songs / audio versions
   if (pathname === '/api/search-alt') {
     const q = parsedUrl.searchParams.get('q') || '';
     const exclude = parsedUrl.searchParams.get('exclude') || '';
@@ -356,22 +428,42 @@ const server = http.createServer(async (req, res) => {
       'Content-Type': 'application/json; charset=UTF-8',
       'Access-Control-Allow-Origin': '*'
     });
-    if (!q) return res.end(JSON.stringify({ videoIds: [] }));
+    if (!q) return res.end(JSON.stringify({ success: true, items: [], videoIds: [] }));
+
+    const cleanQ = q.replace(/^Video YouTube #[a-zA-Z0-9_-]{11}$/i, '').trim();
+
+    // 1. Try InnerTube Search with specific audio & lyrics variations
+    let searchItems = await fetchInnerTubeSearch(`${cleanQ} official audio`, exclude, 480);
+    if (searchItems.length === 0) {
+      searchItems = await fetchInnerTubeSearch(`${cleanQ} lyrics`, exclude, 480);
+    }
+    if (searchItems.length === 0) {
+      searchItems = await fetchInnerTubeSearch(cleanQ, exclude, 480);
+    }
+
+    if (searchItems.length > 0) {
+      const finalItems = searchItems.slice(0, 10);
+      return res.end(JSON.stringify({
+        success: true,
+        items: finalItems,
+        videoIds: finalItems.map((it) => it.videoId)
+      }));
+    }
+
+    // 2. Fallback to HTML watch page regex search
     try {
-      const ytUrl = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
-      const resp = await fetch(ytUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
-      });
+      const ytUrl = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(cleanQ);
+      const resp = await fetch(ytUrl, { headers: YT_COMMON_HEADERS, signal: AbortSignal.timeout(4000) });
       const html = await resp.text();
       const matches = [...html.matchAll(/\/watch\?v=([a-zA-Z0-9_-]{11})/g)].map((m) => m[1]);
       const unique = [...new Set(matches)].filter((id) => id !== exclude);
-      return res.end(JSON.stringify({ videoIds: unique.slice(0, 8) }));
+      return res.end(JSON.stringify({ success: true, items: [], videoIds: unique.slice(0, 8) }));
     } catch (err) {
-      return res.end(JSON.stringify({ videoIds: [], error: err.message }));
+      return res.end(JSON.stringify({ success: false, items: [], videoIds: [], error: err.message }));
     }
   }
 
-  // API: Get YouTube Video Info (Duration & Availability) - Enforces <= 8 mins limit
+  // API: Get YouTube Video Info (Emulates real YouTube Web client) - Enforces <= 8 mins limit
   if (pathname === '/api/video-info') {
     const vid = parsedUrl.searchParams.get('id') || '';
     res.writeHead(200, {
@@ -379,9 +471,24 @@ const server = http.createServer(async (req, res) => {
       'Access-Control-Allow-Origin': '*'
     });
     if (!vid) return res.end(JSON.stringify({ error: 'Missing video id' }));
+
+    // 1. Try InnerTube Player API first (Fastest, authentic YouTube Web client emulation)
+    const itInfo = await fetchInnerTubePlayer(vid);
+    if (itInfo && itInfo.title) {
+      return res.end(JSON.stringify({
+        videoId: vid,
+        lengthSeconds: itInfo.lengthSeconds,
+        title: itInfo.title,
+        channel: itInfo.channel,
+        isLive: itInfo.isLive,
+        available: true
+      }));
+    }
+
+    // 2. Fallback to HTML watch page with Chrome browser headers
     try {
       const resp = await fetch(`https://www.youtube.com/watch?v=${encodeURIComponent(vid)}`, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        headers: YT_COMMON_HEADERS,
         signal: AbortSignal.timeout(4000)
       });
       const html = await resp.text();
@@ -401,7 +508,6 @@ const server = http.createServer(async (req, res) => {
       return res.end(JSON.stringify({ videoId: vid, lengthSeconds: null, title: '', available: true, error: err.message }));
     }
   }
-
 
   // API: Mixer Queue for Solo Viewer (Songs people listen to together)
   if (pathname === '/api/mixer-queue') {

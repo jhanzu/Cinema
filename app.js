@@ -1593,6 +1593,7 @@
         width: '100%',
         height: '100%',
         videoId: state.currentVideo.videoId,
+        host: 'https://www.youtube-nocookie.com',
         playerVars: {
           autoplay: 1,
           controls: 1,
@@ -1602,10 +1603,11 @@
           enablejsapi: 1,
           fs: 1,
           iv_load_policy: 3,
-          origin: originParam
-        ,
+          origin: originParam,
+          widget_referrer: 'https://www.youtube.com/',
           cc_load_policy: state.subtitlesEnabled ? 1 : 0,
-          cc_lang_pref: 'vi'},
+          cc_lang_pref: 'vi'
+        },
         events: {
           onReady: (event) => {
             ytReady = true;
@@ -1675,10 +1677,13 @@
     if (!mount) return;
     const startParam = startSeconds > 0 ? `&start=${Math.floor(startSeconds)}` : '';
     const ccParam = state.subtitlesEnabled ? '&cc_load_policy=1&cc_lang_pref=vi' : '&cc_load_policy=0';
+    const originParam = (window.location.protocol.startsWith('http') && window.location.origin)
+      ? `&origin=${encodeURIComponent(window.location.origin)}`
+      : '';
     mount.innerHTML = `
       <iframe
         id="youtubePlayerContainer"
-        src="https://www.youtube.com/embed/${videoId}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1${startParam}"
+        src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1&widget_referrer=${encodeURIComponent('https://www.youtube.com/')}${originParam}${startParam}"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowfullscreen
         referrerpolicy="strict-origin-when-cross-origin"
@@ -1887,12 +1892,39 @@
     updateNextPlayingUI();
   }
 
-  function handleVideoPlayError(errCode) {
+  let isAutoRescuingSong = false;
+  async function handleVideoPlayError(errCode) {
     clearTimeout(videoLoadWatchdogTimer);
     const currentVid = state.currentVideo;
     if (!currentVid || !currentVid.videoId) return;
 
     const failedVidId = currentVid.videoId;
+
+    // 🎵 AUTO-RESCUE FOR BLOCKED MUSIC (Error 150 / 101: Owner disabled external embedding)
+    // Seamlessly searches for official audio/lyric/cover version so playback never stops!
+    if ((errCode === 150 || errCode === 101) && !isAutoRescuingSong && (currentVid._rescueAttempts || 0) < 2) {
+      isAutoRescuingSong = true;
+      currentVid._rescueAttempts = (currentVid._rescueAttempts || 0) + 1;
+      showToast('🎵 Bài hát bị giới hạn nhúng, rạp đang tự động tìm bản âm thanh/bản nhạc thay thế chuẩn YouTube...');
+      try {
+        const alt = await findPlayableAlternative(currentVid.title, failedVidId);
+        if (alt && alt.videoId && alt.videoId !== failedVidId) {
+          failedVideoIds.add(failedVidId);
+          failedVideoIds.delete(alt.videoId);
+          showToast(`✨ Đã tự động đổi sang bản nhạc khả dụng: "${alt.title || currentVid.title}"!`);
+          appendSystemChat(`🔄 Tự động chuyển sang bản nhạc thay thế khả dụng trên YouTube: "${alt.title || currentVid.title}" (do bản gốc giới hạn nhúng)`);
+          currentVid.originalVideoId = failedVidId;
+          currentVid.videoId = alt.videoId;
+          if (alt.title) currentVid.title = alt.title;
+          if (alt.channel) currentVid.channel = alt.channel;
+          isAutoRescuingSong = false;
+          playCinemaVideo(currentVid, 0, true);
+          return;
+        }
+      } catch (_) {}
+      isAutoRescuingSong = false;
+    }
+
     if (failedVideoIds.has(failedVidId)) {
       return; // Already handled this failed video
     }
@@ -1964,17 +1996,28 @@
       .replace(/\[.*?\]/g, '')
       .trim() || title;
 
-    // 1. Try local server search-alt endpoint
+    // 1. Try server search-alt endpoint (powered by authentic YouTube InnerTube API)
     try {
       const resp = await fetch(`/api/search-alt?q=${encodeURIComponent(cleanTitle)}&exclude=${encodeURIComponent(failedId)}`, {
-        signal: AbortSignal.timeout(3000)
+        signal: AbortSignal.timeout(4000)
       });
       if (resp.ok) {
         const data = await resp.json();
+        if (Array.isArray(data.items) && data.items.length > 0) {
+          for (const cand of data.items) {
+            if (cand.videoId && cand.videoId !== failedId && !failedVideoIds.has(cand.videoId)) {
+              return {
+                videoId: cand.videoId,
+                title: cand.title || cleanTitle,
+                channel: cand.channel || 'Bản YouTube thay thế'
+              };
+            }
+          }
+        }
         if (Array.isArray(data.videoIds)) {
           for (const candId of data.videoIds) {
             if (candId !== failedId && !failedVideoIds.has(candId)) {
-              return { videoId: candId, channel: 'Bản thay thế không giới hạn' };
+              return { videoId: candId, title: cleanTitle, channel: 'Bản YouTube thay thế' };
             }
           }
         }
@@ -1990,14 +2033,14 @@
 
     const low = cleanTitle.toLowerCase();
     for (const pair of KNOWN_PAIRS) {
-      if (pair.match.every(m => low.includes(m)) && pair.id !== failedId && !failedVideoIds.has(pair.id)) {
-        return { videoId: pair.id, channel: pair.title };
+      if (pair.match.every((m) => low.includes(m)) && pair.id !== failedId && !failedVideoIds.has(pair.id)) {
+        return { videoId: pair.id, title: pair.title, channel: pair.title };
       }
     }
 
     // 3. Public search gateways
     const publicGateways = [
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://www.youtube.com/results?search_query=${encodeURIComponent(cleanTitle)}`)}`
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://www.youtube.com/results?search_query=${encodeURIComponent(cleanTitle + ' audio')}`)}`
     ];
 
     for (const gw of publicGateways) {
@@ -2005,10 +2048,10 @@
         const r = await fetch(gw, { signal: AbortSignal.timeout(3500) });
         if (r.ok) {
           const text = await r.text();
-          const matches = [...text.matchAll(/\/watch\?v=([a-zA-Z0-9_-]{11})/g)].map(m => m[1]);
-          const unique = [...new Set(matches)].filter(id => id !== failedId && !failedVideoIds.has(id));
+          const matches = [...text.matchAll(/\/watch\?v=([a-zA-Z0-9_-]{11})/g)].map((m) => m[1]);
+          const unique = [...new Set(matches)].filter((id) => id !== failedId && !failedVideoIds.has(id));
           if (unique.length > 0) {
-            return { videoId: unique[0], channel: 'Bản YouTube thay thế' };
+            return { videoId: unique[0], title: cleanTitle, channel: 'Bản YouTube thay thế' };
           }
         }
       } catch (err) {}
