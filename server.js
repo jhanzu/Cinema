@@ -864,6 +864,27 @@ function handleClientMessage(ws, data) {
       break;
     }
 
+    case 'CLEAR_QUEUE': {
+      roomState.queue = [];
+      broadcast({
+        type: 'QUEUE_UPDATE',
+        queue: []
+      });
+      break;
+    }
+
+    case 'DELETE_QUEUE_ITEMS': {
+      if (Array.isArray(data.itemIds) && data.itemIds.length > 0) {
+        const idSet = new Set(data.itemIds);
+        roomState.queue = roomState.queue.filter((q) => !idSet.has(q.id));
+        broadcast({
+          type: 'QUEUE_UPDATE',
+          queue: roomState.queue
+        });
+      }
+      break;
+    }
+
     case 'VOTE_QUEUE_ITEM': {
       if (!data.itemId) return;
       const item = roomState.queue.find((q) => q.id === data.itemId);

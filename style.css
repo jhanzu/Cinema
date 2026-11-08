@@ -3953,3 +3953,200 @@ body.is-dragging-camera .seat-speech-bubble {
 .sm-reset-history-btn:hover {
   color: #F87171;
 }
+
+
+/* ==========================================================================
+   SOLO VIEWER QUEUE MANAGEMENT STYLES
+   ========================================================================== */
+.solo-queue-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+.sq-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sq-toolbar-badge {
+  background: rgba(99, 102, 241, 0.18);
+  border: 1px solid rgba(129, 140, 248, 0.35);
+  color: #C7D2FE;
+  font-size: 0.64rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+
+.sq-toolbar-title {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.sq-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sq-btn {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.sq-btn-select {
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  color: #93C5FD;
+}
+
+.sq-btn-select:hover,
+.sq-btn-select.active {
+  background: rgba(59, 130, 246, 0.3);
+  border-color: #60A5FA;
+  color: #FFF;
+}
+
+.sq-btn-clear {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  color: #FCA5A5;
+}
+
+.sq-btn-clear:hover {
+  background: rgba(239, 68, 68, 0.28);
+  border-color: #EF4444;
+  color: #FFF;
+}
+
+/* Queue Batch Action Bar */
+.queue-batch-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, rgba(30, 27, 75, 0.9), rgba(15, 23, 42, 0.95));
+  border: 1px solid rgba(139, 92, 246, 0.45);
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(109, 40, 217, 0.25);
+  animation: fadeInMixer 0.2s ease-out;
+}
+
+.qbb-info {
+  font-size: 0.74rem;
+  color: #E2E8F0;
+}
+
+.qbb-count-label strong {
+  color: #A78BFA;
+  font-size: 0.84rem;
+}
+
+.qbb-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.qbb-btn-delete {
+  background: linear-gradient(135deg, #EF4444, #DC2626);
+  border: none;
+  color: #FFF;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35);
+}
+
+.qbb-btn-delete:hover {
+  background: linear-gradient(135deg, #DC2626, #B91C1C);
+  transform: translateY(-1px);
+}
+
+.qbb-btn-delete:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.qbb-btn-close {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #94A3B8;
+  font-size: 0.75rem;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.qbb-btn-close:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #FFF;
+}
+
+.queue-select-cb {
+  width: 17px;
+  height: 17px;
+  accent-color: #8B5CF6;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-right: -2px;
+}
+
+.queue-card.select-mode {
+  cursor: pointer;
+}
+
+.queue-card.is-selected {
+  background: rgba(139, 92, 246, 0.15) !important;
+  border-color: rgba(139, 92, 246, 0.5) !important;
+}
+
+.queue-item-delete-btn {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #F87171;
+  font-size: 0.75rem;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.queue-item-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.35);
+  border-color: #EF4444;
+  color: #FFF;
+  transform: scale(1.08);
+}

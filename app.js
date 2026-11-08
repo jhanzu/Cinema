@@ -250,6 +250,8 @@
 
     // Voting Queue & History (Syncs with live queue)
     queue: (cachedLiveRoom && Array.isArray(cachedLiveRoom.queue)) ? cachedLiveRoom.queue : [...INITIAL_QUEUE],
+    queueSelectMode: false,
+    selectedQueueItemIds: new Set(),
     mixerCount: 5,
     mixerNoDuplicate: localStorage.getItem('hanzu_mixer_no_duplicate') !== 'false',
     mixerHistoryVideoIds: new Set((() => {
@@ -679,6 +681,37 @@
                       <span>🔀 Mix ngay <span id="smAddCountLabel">5</span> bài</span>
                     </button>
                   </div>
+                </div>
+              </div>
+
+              <!-- Solo Viewer Queue Management Toolbar (Visible only when solo & queue > 0) -->
+              <div class="solo-queue-toolbar" id="soloQueueToolbar" style="display:none;">
+                <div class="sq-toolbar-left">
+                  <span class="sq-toolbar-badge">💺 Rạp 1 người</span>
+                  <span class="sq-toolbar-title">Quản lý hàng đợi</span>
+                </div>
+                <div class="sq-toolbar-actions">
+                  <button type="button" class="sq-btn sq-btn-select" id="btnToggleQueueSelectMode" title="Bật/tắt chế độ chọn để xóa nhiều bài">
+                    ☑️ Chọn bài
+                  </button>
+                  <button type="button" class="sq-btn sq-btn-clear" id="btnClearAllQueue" title="Xóa toàn bộ bài trong hàng đợi">
+                    🗑️ Xóa tất cả
+                  </button>
+                </div>
+              </div>
+
+              <!-- Batch Action Bar when Select Mode is active -->
+              <div class="queue-batch-bar" id="queueBatchBar" style="display:none;">
+                <div class="qbb-info">
+                  <span class="qbb-count-label">Đã chọn: <strong id="queueSelectedCountText">0</strong> bài</span>
+                </div>
+                <div class="qbb-actions">
+                  <button type="button" class="link-btn" id="btnSelectAllQueue">Tất cả</button>
+                  <button type="button" class="link-btn" id="btnDeselectAllQueue">Bỏ chọn</button>
+                  <button type="button" class="qbb-btn-delete" id="btnDeleteSelectedQueue">
+                    🗑️ Xóa (<span id="queueDeleteBtnCount">0</span>)
+                  </button>
+                  <button type="button" class="qbb-btn-close" id="btnCloseQueueSelectMode" title="Thoát chế độ chọn">✕</button>
                 </div>
               </div>
 
@@ -1184,6 +1217,7 @@
     updateSkipVoteUI();
     updatePlayPauseButton();
     updateMixerQueueVisibility();
+    updateSoloQueueToolbar();
   }
 
   function selectSeat(seatCode, silent = false) {
@@ -3190,6 +3224,85 @@
     if (modal) modal.classList.remove('open');
   }
 
+  function updateSoloQueueToolbar() {
+    const toolbar = document.getElementById('soloQueueToolbar');
+    const batchBar = document.getElementById('queueBatchBar');
+    const btnSelect = document.getElementById('btnToggleQueueSelectMode');
+    const totalOccupants = Object.keys(getOccupantMap()).length;
+    const isSolo = totalOccupants <= 1;
+    const hasQueue = Array.isArray(state.queue) && state.queue.length > 0;
+
+    if (!isSolo || !hasQueue) {
+      if (toolbar) toolbar.style.display = 'none';
+      if (batchBar) batchBar.style.display = 'none';
+      state.queueSelectMode = false;
+      state.selectedQueueItemIds.clear();
+      return;
+    }
+
+    if (toolbar) toolbar.style.display = 'flex';
+    if (btnSelect) btnSelect.classList.toggle('active', state.queueSelectMode);
+
+    if (batchBar) {
+      batchBar.style.display = state.queueSelectMode ? 'flex' : 'none';
+      const countText = document.getElementById('queueSelectedCountText');
+      const btnCount = document.getElementById('queueDeleteBtnCount');
+      const delBtn = document.getElementById('btnDeleteSelectedQueue');
+      const cnt = state.selectedQueueItemIds.size;
+      if (countText) countText.textContent = cnt;
+      if (btnCount) btnCount.textContent = cnt;
+      if (delBtn) delBtn.disabled = cnt === 0;
+    }
+  }
+
+  function deleteSingleQueueItem(itemId) {
+    const item = state.queue.find((q) => q.id === itemId);
+    if (!item) return;
+    state.queue = state.queue.filter((q) => q.id !== itemId);
+    state.selectedQueueItemIds.delete(itemId);
+    saveLiveQueueToStorage();
+    renderQueue();
+    broadcastSync({ type: 'DELETE_QUEUE_ITEMS', itemIds: [itemId] });
+    broadcastSync({ type: 'QUEUE_UPDATE', queue: state.queue });
+    showToast(`🗑️ Đã xóa bài "${item.title}" khỏi hàng đợi!`);
+    if (sfx && typeof sfx.playChatPop === 'function') sfx.playChatPop();
+  }
+
+  function clearAllQueue() {
+    if (!state.queue || state.queue.length === 0) return;
+    const count = state.queue.length;
+    if (!confirm(`Bạn có chắc chắn muốn xóa toàn bộ ${count} bài trong hàng đợi không?`)) {
+      return;
+    }
+    state.queue = [];
+    state.selectedQueueItemIds.clear();
+    state.queueSelectMode = false;
+    saveLiveQueueToStorage();
+    renderQueue();
+    broadcastSync({ type: 'CLEAR_QUEUE' });
+    broadcastSync({ type: 'QUEUE_UPDATE', queue: [] });
+    showToast(`🗑️ Đã làm trống toàn bộ hàng đợi (${count} bài)!`);
+    if (sfx && typeof sfx.playChatPop === 'function') sfx.playChatPop();
+  }
+
+  function deleteSelectedQueueItems() {
+    const count = state.selectedQueueItemIds.size;
+    if (count === 0) {
+      showToast('⚠️ Vui lòng tích chọn ít nhất 1 bài để xóa.');
+      return;
+    }
+    const idsToDelete = Array.from(state.selectedQueueItemIds);
+    state.queue = state.queue.filter((q) => !state.selectedQueueItemIds.has(q.id));
+    state.selectedQueueItemIds.clear();
+    state.queueSelectMode = false;
+    saveLiveQueueToStorage();
+    renderQueue();
+    broadcastSync({ type: 'DELETE_QUEUE_ITEMS', itemIds: idsToDelete });
+    broadcastSync({ type: 'QUEUE_UPDATE', queue: state.queue });
+    showToast(`🗑️ Đã xóa ${count} bài đã chọn khỏi hàng đợi!`);
+    if (sfx && typeof sfx.playChatPop === 'function') sfx.playChatPop();
+  }
+
   function renderQueue() {
     sortQueue();
     updateNextPlayingUI();
@@ -3198,6 +3311,7 @@
     if (badgeEl) badgeEl.textContent = state.queue.length;
     updateSkipVoteUI();
     updateMixerQueueVisibility();
+    updateSoloQueueToolbar();
     if (!listEl) return;
 
     if (state.queue.length === 0) {
@@ -3209,13 +3323,18 @@
       return;
     }
 
+    const totalOccupants = Object.keys(getOccupantMap()).length;
+    const isSolo = totalOccupants <= 1;
+
     listEl.innerHTML = state.queue
       .map((item, idx) => {
         const isTop = idx === 0;
         const hasVoted = state.localVotedSongIds.has(item.id);
         const thumbUrl = `https://i.ytimg.com/vi/${item.videoId}/mqdefault.jpg`;
+        const isSelected = state.selectedQueueItemIds.has(item.id);
         return `
-          <div class="queue-card ${isTop ? 'top-rank' : ''}">
+          <div class="queue-card ${isTop ? 'top-rank' : ''} ${state.queueSelectMode ? 'select-mode' : ''} ${isSelected ? 'is-selected' : ''}" data-queue-card-id="${item.id}">
+            ${state.queueSelectMode ? `<input type="checkbox" class="queue-select-cb" data-select-id="${item.id}" ${isSelected ? 'checked' : ''} />` : ''}
             <div class="queue-thumb-wrap">
               <img src="${thumbUrl}" alt="${escapeHtml(item.title)}" loading="lazy" />
               <span class="rank-tag">${isTop ? '👑 #1 Sắp chiếu' : `#${idx + 1}`}</span>
@@ -3234,6 +3353,7 @@
                 <span>▲</span>
                 <span>${item.votes}</span>
               </button>
+              ${isSolo ? `<button type="button" class="queue-item-delete-btn" data-delete-id="${item.id}" title="Xóa bài này khỏi hàng đợi">🗑️</button>` : ''}
             </div>
           </div>
         `;
@@ -3241,12 +3361,41 @@
       .join('');
 
     listEl.querySelectorAll('[data-vote-id]').forEach((btn) => {
-      btn.addEventListener('click', () => toggleVoteQueueItem(btn.dataset.voteId));
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleVoteQueueItem(btn.dataset.voteId);
+      });
     });
 
     listEl.querySelectorAll('[data-play-id]').forEach((btn) => {
-      btn.addEventListener('click', () => forcePlayQueueItem(btn.dataset.playId));
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        forcePlayQueueItem(btn.dataset.playId);
+      });
     });
+
+    listEl.querySelectorAll('[data-delete-id]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteSingleQueueItem(btn.dataset.deleteId);
+      });
+    });
+
+    if (state.queueSelectMode) {
+      listEl.querySelectorAll('.queue-card.select-mode').forEach((card) => {
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('.queue-actions') || e.target.closest('.play-now-mini')) return;
+          const id = card.dataset.queueCardId;
+          if (!id) return;
+          if (state.selectedQueueItemIds.has(id)) {
+            state.selectedQueueItemIds.delete(id);
+          } else {
+            state.selectedQueueItemIds.add(id);
+          }
+          renderQueue();
+        });
+      });
+    }
   }
 
   function renderPresetChips() {
@@ -4080,6 +4229,24 @@
       case 'REACTION':
         if (data.seat && data.emoji) {
           spawnSeatReaction3D(data.seat, data.emoji, false, true);
+        }
+        break;
+
+      case 'CLEAR_QUEUE':
+        state.queue = [];
+        state.selectedQueueItemIds.clear();
+        state.queueSelectMode = false;
+        renderQueue();
+        updateSkipVoteUI();
+        break;
+
+      case 'DELETE_QUEUE_ITEMS':
+        if (Array.isArray(data.itemIds)) {
+          const idSet = new Set(data.itemIds);
+          state.queue = (state.queue || []).filter((q) => !idSet.has(q.id));
+          idSet.forEach((id) => state.selectedQueueItemIds.delete(id));
+          renderQueue();
+          updateSkipVoteUI();
         }
         break;
 
@@ -5408,6 +5575,37 @@
       if (state.mixerHistoryVideoIds) state.mixerHistoryVideoIds.clear();
       saveMixerHistoryToStorage();
       showToast('🔄 Đã xóa bộ nhớ bài cũ! Các lần mix tiếp theo có thể gợi ý lại từ đầu.');
+    });
+
+    // Solo Queue Toolbar & Batch Delete Event Listeners
+    document.getElementById('btnToggleQueueSelectMode')?.addEventListener('click', () => {
+      state.queueSelectMode = !state.queueSelectMode;
+      if (!state.queueSelectMode) state.selectedQueueItemIds.clear();
+      renderQueue();
+    });
+
+    document.getElementById('btnClearAllQueue')?.addEventListener('click', () => {
+      clearAllQueue();
+    });
+
+    document.getElementById('btnCloseQueueSelectMode')?.addEventListener('click', () => {
+      state.queueSelectMode = false;
+      state.selectedQueueItemIds.clear();
+      renderQueue();
+    });
+
+    document.getElementById('btnSelectAllQueue')?.addEventListener('click', () => {
+      (state.queue || []).forEach((q) => state.selectedQueueItemIds.add(q.id));
+      renderQueue();
+    });
+
+    document.getElementById('btnDeselectAllQueue')?.addEventListener('click', () => {
+      state.selectedQueueItemIds.clear();
+      renderQueue();
+    });
+
+    document.getElementById('btnDeleteSelectedQueue')?.addEventListener('click', () => {
+      deleteSelectedQueueItems();
     });
 
     document.getElementById('btnMixerAddNow')?.addEventListener('click', () => {
