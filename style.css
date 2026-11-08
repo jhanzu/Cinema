@@ -3587,6 +3587,50 @@ body.is-dragging-camera .seat-speech-bubble {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sm-count-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sm-custom-box {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(139, 92, 246, 0.45);
+  border-radius: 6px;
+  padding: 1px 6px;
+  transition: all 0.15s ease;
+}
+
+.sm-custom-box:hover,
+.sm-custom-box:focus-within {
+  border-color: #A78BFA;
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.4);
+}
+
+.sm-custom-input {
+  width: 36px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #F8FAFC;
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-align: center;
+  padding: 2px 0;
+}
+
+.sm-custom-unit {
+  font-size: 0.68rem;
+  color: #94A3B8;
+  font-weight: 700;
+  margin-left: 2px;
 }
 
 .sm-count-label {

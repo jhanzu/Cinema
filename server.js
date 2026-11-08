@@ -204,7 +204,7 @@ const mixerCache = new Map();
 
 async function fetchMixerQueue(videoId, songTitle, count = 5) {
   const MAX_DURATION = 480; // 8 minutes limit strictly enforced
-  const cleanCount = Math.min(20, Math.max(1, count));
+  const cleanCount = Math.min(50, Math.max(1, count));
   const cacheKey = `${videoId || ''}-${songTitle || ''}-${cleanCount}`;
   if (mixerCache.has(cacheKey)) {
     const cached = mixerCache.get(cacheKey);
@@ -408,7 +408,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/mixer-queue') {
     const vid = parsedUrl.searchParams.get('videoId') || parsedUrl.searchParams.get('id') || '';
     const title = parsedUrl.searchParams.get('title') || '';
-    const count = Math.min(20, Math.max(1, parseInt(parsedUrl.searchParams.get('count') || '5', 10)));
+    const count = Math.min(50, Math.max(1, parseInt(parsedUrl.searchParams.get('count') || '5', 10)));
     res.writeHead(200, {
       'Content-Type': 'application/json; charset=UTF-8',
       'Access-Control-Allow-Origin': '*'

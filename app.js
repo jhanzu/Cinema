@@ -630,11 +630,25 @@
                 <div class="solo-mixer-controls">
                   <div class="sm-count-row">
                     <span class="sm-count-label">Số bài mix:</span>
-                    <div class="sm-count-pills" id="smCountPills">
-                      <button type="button" class="sm-pill-btn" data-count="3">3 bài</button>
-                      <button type="button" class="sm-pill-btn active" data-count="5">5 bài</button>
-                      <button type="button" class="sm-pill-btn" data-count="8">8 bài</button>
-                      <button type="button" class="sm-pill-btn" data-count="10">10 bài</button>
+                    <div class="sm-count-input-wrap">
+                      <div class="sm-count-pills" id="smCountPills">
+                        <button type="button" class="sm-pill-btn" data-count="3">3</button>
+                        <button type="button" class="sm-pill-btn active" data-count="5">5</button>
+                        <button type="button" class="sm-pill-btn" data-count="10">10</button>
+                        <button type="button" class="sm-pill-btn" data-count="20">20</button>
+                      </div>
+                      <div class="sm-custom-box" title="Tự nhập số bài muốn mix tùy ý (1 - 50 bài)">
+                        <input
+                          type="number"
+                          id="inputCustomMixerCount"
+                          class="sm-custom-input"
+                          min="1"
+                          max="50"
+                          value="5"
+                          placeholder="Số"
+                        />
+                        <span class="sm-custom-unit">bài</span>
+                      </div>
                     </div>
                   </div>
 
@@ -2906,7 +2920,7 @@
 
   async function fetchMixerTracks(count = 5) {
     const src = getSoloMixerSource();
-    const cleanCount = Math.min(20, Math.max(1, count));
+    const cleanCount = Math.min(50, Math.max(1, count));
     let results = [];
 
     // 1. Try server API /api/mixer-queue
@@ -3053,7 +3067,8 @@
       </div>
     `;
 
-    const tracks = await fetchMixerTracks(12);
+    const countToLoad = Math.max(state.mixerCount || 5, 12);
+    const tracks = await fetchMixerTracks(countToLoad);
     state.mixerRecommendations = tracks;
 
     if (tracks.length === 0) {
@@ -5284,14 +5299,42 @@
 
 
     // Solo Viewer Mixer Queue Controls & Modal Events
+    const updateMixerCountUI = (newVal) => {
+      state.mixerCount = Math.max(1, Math.min(50, newVal));
+      const lbl = document.getElementById('smAddCountLabel');
+      if (lbl) lbl.textContent = state.mixerCount;
+      const customInput = document.getElementById('inputCustomMixerCount');
+      if (customInput && parseInt(customInput.value, 10) !== state.mixerCount) {
+        customInput.value = state.mixerCount;
+      }
+      document.querySelectorAll('#smCountPills .sm-pill-btn').forEach((b) => {
+        if (parseInt(b.dataset.count, 10) === state.mixerCount) {
+          b.classList.add('active');
+        } else {
+          b.classList.remove('active');
+        }
+      });
+    };
+
     document.querySelectorAll('#smCountPills .sm-pill-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
-        document.querySelectorAll('#smCountPills .sm-pill-btn').forEach((b) => b.classList.remove('active'));
-        btn.classList.add('active');
-        state.mixerCount = parseInt(btn.dataset.count || '5', 10);
-        const lbl = document.getElementById('smAddCountLabel');
-        if (lbl) lbl.textContent = state.mixerCount;
+        const val = parseInt(btn.dataset.count || '5', 10);
+        updateMixerCountUI(val);
       });
+    });
+
+    const customMixerInput = document.getElementById('inputCustomMixerCount');
+    customMixerInput?.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10);
+      if (!isNaN(val) && val >= 1) {
+        updateMixerCountUI(val);
+      }
+    });
+    customMixerInput?.addEventListener('change', (e) => {
+      let val = parseInt(e.target.value, 10);
+      if (isNaN(val) || val < 1) val = 1;
+      if (val > 50) val = 50;
+      updateMixerCountUI(val);
     });
 
     document.getElementById('btnMixerAddNow')?.addEventListener('click', () => {
