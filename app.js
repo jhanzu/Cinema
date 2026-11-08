@@ -2394,6 +2394,10 @@
       const onMessageProbe = (e) => {
         if (settled) return;
         try {
+          const probeIfr = targetDiv.querySelector('iframe');
+          if (probeIfr && e.source && e.source !== probeIfr.contentWindow) {
+            return; // strictly ignore other players/iframes
+          }
           const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
           if (data && (data.event === 'onError' || data.info === 150 || data.info === 101 || data.info === 100)) {
             const errCode = (typeof data.info === 'number') ? data.info : 150;
@@ -2583,46 +2587,55 @@
     if (check) check.checked = !!state.autoSkipAds;
   }
 
+  function getCinemaPlayerIframe() {
+    return document.querySelector('#ytPlayerMount iframe');
+  }
+
   function forceSkipAdNow() {
-    const ifrs = document.querySelectorAll('iframe[src*="youtube.com"]');
-    ifrs.forEach((ifr) => {
+    const cinemaIframe = getCinemaPlayerIframe();
+    if (cinemaIframe && cinemaIframe.contentWindow) {
       try {
-        ifr.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: 'seekTo', args: [999999, true] }), '*');
-        ifr.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: 'setPlaybackRate', args: [16] }), '*');
-        ifr.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: 'skipAd', args: [] }), '*');
+        // Send official skipAd command to YouTube player inside the cinema iframe
+        cinemaIframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'skipAd', args: [] }), '*');
+        // Set ad playback rate to 16x so unskippable ads fly by in < 1 second without disturbing the movie
+        cinemaIframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'setPlaybackRate', args: [16] }), '*');
       } catch (_) {}
-    });
+    }
 
     if (ytReady && ytPlayer) {
       try {
         if (typeof ytPlayer.setPlaybackRate === 'function') ytPlayer.setPlaybackRate(16);
-        const dur = typeof ytPlayer.getDuration === 'function' ? ytPlayer.getDuration() : 0;
-        if (dur > 0 && typeof ytPlayer.seekTo === 'function') {
-          ytPlayer.seekTo(dur, true);
-        }
       } catch (_) {}
     }
   }
 
   function startAutoAdSkipperEngine() {
-    // 1. Listen for YouTube player window message events
+    // 1. Listen for YouTube player window message events ONLY from the cinema iframe
     window.addEventListener('message', (e) => {
       if (!state.autoSkipAds) return;
       try {
+        const cinemaIframe = getCinemaPlayerIframe();
+        if (!cinemaIframe || e.source !== cinemaIframe.contentWindow) {
+          return; // Strictly ignore all background probe players or external iframes
+        }
+
         const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
         if (!data) return;
 
         if (data.event === 'infoDelivery' && data.info) {
           const info = data.info;
-          const isAdActive = info.adState === 1 || info.isAdPlaying || (info.videoData && info.videoData.video_id && state.currentVideo?.videoId && info.videoData.video_id !== state.currentVideo.videoId);
+          // Genuine YouTube ad flags: adState === 1 or isAdPlaying === true
+          const isAdActive = info.adState === 1 || info.isAdPlaying === true;
           if (isAdActive) {
             handleAdDetected();
+          } else if (state.isAdPlaying && (info.adState === 0 || info.isAdPlaying === false)) {
+            handleAdEnded();
           }
         }
       } catch (_) {}
     });
 
-    // 2. High-frequency watcher loop (runs every 220ms)
+    // 2. Watcher loop for player state (runs every 300ms)
     if (adSkipLoopTimer) clearInterval(adSkipLoopTimer);
     adSkipLoopTimer = setInterval(() => {
       if (!state.autoSkipAds || !ytReady || !ytPlayer || !state.isPlaying) {
@@ -2632,18 +2645,8 @@
 
       let isAd = false;
       try {
-        if (typeof ytPlayer.getVideoData === 'function') {
-          const vd = ytPlayer.getVideoData();
-          if (vd && vd.video_id && state.currentVideo?.videoId && vd.video_id !== state.currentVideo.videoId) {
-            isAd = true;
-          }
-        }
-
-        if (!isAd && typeof ytPlayer.getDuration === 'function') {
-          const dur = ytPlayer.getDuration();
-          if (dur > 0 && dur <= 35 && state.currentVideo?.duration && state.currentVideo.duration > 60) {
-            isAd = true;
-          }
+        if (typeof ytPlayer.getAdState === 'function') {
+          isAd = ytPlayer.getAdState() === 1;
         }
       } catch (_) {}
 
@@ -2652,7 +2655,7 @@
       } else if (state.isAdPlaying) {
         handleAdEnded();
       }
-    }, 220);
+    }, 300);
   }
 
   function handleAdDetected() {
@@ -2671,34 +2674,23 @@
       } catch (_) {}
     }
 
-    // Accelerate ad to 16x and seek to end
+    // Accelerate ad to 16x and trigger skipAd (NEVER seek to end of movie)
     forceSkipAdNow();
-
-    // If ad remains stuck for > 2.2 seconds, execute seamless refresh bypass
-    const timeInAd = Date.now() - adDetectionStartTime;
-    if (timeInAd > 2200) {
-      if (!state.lastAdBypassTime || Date.now() - state.lastAdBypassTime > 6000) {
-        state.lastAdBypassTime = Date.now();
-        const cur = (ytPlayer && typeof ytPlayer.getCurrentTime === 'function') ? ytPlayer.getCurrentTime() : 0;
-        if (state.currentVideo?.videoId && typeof ytPlayer.loadVideoById === 'function') {
-          ytPlayer.loadVideoById(state.currentVideo.videoId, cur > 5 ? cur : 0);
-        }
-      }
-    }
   }
 
   function handleAdEnded() {
+    if (!state.isAdPlaying) return;
     state.isAdPlaying = false;
     const indicator = document.getElementById('adSkipIndicator');
     if (indicator) indicator.classList.remove('show');
 
-    // Restore volume and speed
+    // Restore volume and playback rate
     try {
       if (ytPlayer) {
         ytPlayer.setVolume(state.volume);
         if (!state.isMuted) ytPlayer.unMute();
-        if (state.preAdRate && typeof ytPlayer.setPlaybackRate === 'function') {
-          ytPlayer.setPlaybackRate(state.preAdRate);
+        if (typeof ytPlayer.setPlaybackRate === 'function') {
+          ytPlayer.setPlaybackRate(state.preAdRate || state.playbackRate || 1);
         }
       }
     } catch (_) {}
@@ -5925,12 +5917,16 @@
       }
     });
 
-    // Global PostMessage listener for YouTube Player Iframe errors
+    // Global PostMessage listener for YouTube Player Iframe errors (strictly for active cinema screen only)
     window.addEventListener('message', (event) => {
       try {
         if (!event.data) return;
         if (event.origin && !event.origin.includes('youtube.com') && !event.origin.includes('youtube-nocookie.com')) {
           return;
+        }
+        const cinemaIframe = getCinemaPlayerIframe();
+        if (!cinemaIframe || event.source !== cinemaIframe.contentWindow) {
+          return; // strictly ignore background probe iframes or external dialogs
         }
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
         if (data && data.event === 'onError') {
