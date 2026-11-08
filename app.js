@@ -680,21 +680,24 @@
                       <span class="sm-spinner" id="smSpinner" style="display:none;">⏳</span>
                       <span>🔀 Mix ngay <span id="smAddCountLabel">5</span> bài</span>
                     </button>
+                    <button type="button" class="btn-mixer-clear-queue" id="btnMixerClearQueue" title="Xóa toàn bộ các bài trong hàng đợi">
+                      🗑️ Xóa queue
+                    </button>
                   </div>
                 </div>
               </div>
 
-              <!-- Solo Viewer Queue Management Toolbar (Visible only when solo & queue > 0) -->
-              <div class="solo-queue-toolbar" id="soloQueueToolbar" style="display:none;">
+              <!-- Queue Management Toolbar (Always visible when queue has items) -->
+              <div class="solo-queue-toolbar" id="soloQueueToolbar" style="${state.queue && state.queue.length > 0 ? 'display:flex;' : 'display:none;'}">
                 <div class="sq-toolbar-left">
-                  <span class="sq-toolbar-badge">💺 Rạp 1 người</span>
-                  <span class="sq-toolbar-title">Quản lý hàng đợi</span>
+                  <span class="sq-toolbar-badge">🎵 Hàng đợi</span>
+                  <span class="sq-toolbar-title" id="sqQueueCountTitle">${state.queue ? state.queue.length : 0} bài chờ chiếu</span>
                 </div>
                 <div class="sq-toolbar-actions">
-                  <button type="button" class="sq-btn sq-btn-select" id="btnToggleQueueSelectMode" title="Bật/tắt chế độ chọn để xóa nhiều bài">
+                  <button type="button" class="sq-btn sq-btn-select" id="btnToggleQueueSelectMode" title="Chọn nhiều bài để xóa cùng lúc">
                     ☑️ Chọn bài
                   </button>
-                  <button type="button" class="sq-btn sq-btn-clear" id="btnClearAllQueue" title="Xóa toàn bộ bài trong hàng đợi">
+                  <button type="button" class="sq-btn sq-btn-clear" id="btnClearAllQueue" title="Xóa toàn bộ hàng đợi">
                     🗑️ Xóa tất cả
                   </button>
                 </div>
@@ -3228,11 +3231,15 @@
     const toolbar = document.getElementById('soloQueueToolbar');
     const batchBar = document.getElementById('queueBatchBar');
     const btnSelect = document.getElementById('btnToggleQueueSelectMode');
-    const totalOccupants = Object.keys(getOccupantMap()).length;
-    const isSolo = totalOccupants <= 1;
+    const countTitle = document.getElementById('sqQueueCountTitle');
+    const mixerClearBtn = document.getElementById('btnMixerClearQueue');
     const hasQueue = Array.isArray(state.queue) && state.queue.length > 0;
 
-    if (!isSolo || !hasQueue) {
+    if (mixerClearBtn) {
+      mixerClearBtn.style.display = hasQueue ? 'inline-flex' : 'none';
+    }
+
+    if (!hasQueue) {
       if (toolbar) toolbar.style.display = 'none';
       if (batchBar) batchBar.style.display = 'none';
       state.queueSelectMode = false;
@@ -3241,6 +3248,7 @@
     }
 
     if (toolbar) toolbar.style.display = 'flex';
+    if (countTitle) countTitle.textContent = `${state.queue.length} bài chờ chiếu`;
     if (btnSelect) btnSelect.classList.toggle('active', state.queueSelectMode);
 
     if (batchBar) {
@@ -3353,7 +3361,7 @@
                 <span>▲</span>
                 <span>${item.votes}</span>
               </button>
-              ${isSolo ? `<button type="button" class="queue-item-delete-btn" data-delete-id="${item.id}" title="Xóa bài này khỏi hàng đợi">🗑️</button>` : ''}
+              <button type="button" class="queue-item-delete-btn" data-delete-id="${item.id}" title="Xóa bài này khỏi hàng đợi">🗑️</button>
             </div>
           </div>
         `;
@@ -5606,6 +5614,10 @@
 
     document.getElementById('btnDeleteSelectedQueue')?.addEventListener('click', () => {
       deleteSelectedQueueItems();
+    });
+
+    document.getElementById('btnMixerClearQueue')?.addEventListener('click', () => {
+      clearAllQueue();
     });
 
     document.getElementById('btnMixerAddNow')?.addEventListener('click', () => {
