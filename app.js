@@ -251,6 +251,13 @@
     // Voting Queue & History (Syncs with live queue)
     queue: (cachedLiveRoom && Array.isArray(cachedLiveRoom.queue)) ? cachedLiveRoom.queue : [...INITIAL_QUEUE],
     mixerCount: 5,
+    mixerNoDuplicate: localStorage.getItem('hanzu_mixer_no_duplicate') !== 'false',
+    mixerHistoryVideoIds: new Set((() => {
+      try {
+        const raw = localStorage.getItem('hanzu_mixer_history');
+        return raw ? JSON.parse(raw) : [];
+      } catch (_) { return []; }
+    })()),
     mixerRecommendations: [],
     history: [],
 
@@ -650,6 +657,17 @@
                         <span class="sm-custom-unit">bài</span>
                       </div>
                     </div>
+                  </div>
+
+                  <!-- No Duplicate Toggle Option -->
+                  <div class="sm-toggle-row">
+                    <label class="sm-toggle-label" title="Bật để các lần mix sau không bị trùng lặp bài với các lần mix trước">
+                      <input type="checkbox" id="toggleMixerNoDuplicate" class="sm-toggle-checkbox" ${state.mixerNoDuplicate ? 'checked' : ''} />
+                      <span class="sm-toggle-text">Không lặp lại bài đã mix</span>
+                    </label>
+                    <button type="button" class="sm-reset-history-btn" id="btnResetMixerHistory" title="Bấm để xóa danh sách bài cũ đã nhớ và làm mới từ đầu" style="display:none;">
+                      <span id="smHistoryCountLabel"></span>
+                    </button>
                   </div>
 
                   <div class="sm-actions-row">
@@ -2867,6 +2885,35 @@
   // =========================================================================
   // SOLO VIEWER MIXER QUEUE ENGINE (Recommendations based on currently playing song)
   // =========================================================================
+  function saveMixerHistoryToStorage() {
+    try {
+      if (state.mixerHistoryVideoIds) {
+        localStorage.setItem(
+          'hanzu_mixer_history',
+          JSON.stringify(Array.from(state.mixerHistoryVideoIds).slice(-300))
+        );
+      }
+    } catch (_) {}
+    updateMixerHistoryUI();
+  }
+
+  function updateMixerHistoryUI() {
+    const btnReset = document.getElementById('btnResetMixerHistory');
+    const countLabel = document.getElementById('smHistoryCountLabel');
+    const toggle = document.getElementById('toggleMixerNoDuplicate');
+    if (toggle) toggle.checked = !!state.mixerNoDuplicate;
+
+    const count = state.mixerHistoryVideoIds ? state.mixerHistoryVideoIds.size : 0;
+    if (btnReset && countLabel) {
+      if (state.mixerNoDuplicate && count > 0) {
+        countLabel.textContent = `(Đã nhớ ${count} bài • Xóa)`;
+        btnReset.style.display = 'inline-block';
+      } else {
+        btnReset.style.display = 'none';
+      }
+    }
+  }
+
   function updateMixerQueueVisibility() {
     const card = document.getElementById('soloMixerCard');
     if (!card) return;
@@ -2883,6 +2930,7 @@
     }
 
     card.style.display = 'block';
+    updateMixerHistoryUI();
 
     const trackTitleEl = document.getElementById('soloMixerSourceTitle');
     const modalTrackEl = document.getElementById('modalMixerSourceSong');
@@ -2923,9 +2971,12 @@
     const cleanCount = Math.min(50, Math.max(1, count));
     let results = [];
 
+    const historyOffset = (state.mixerNoDuplicate && state.mixerHistoryVideoIds) ? state.mixerHistoryVideoIds.size : 0;
+    const countToFetch = Math.min(50, cleanCount + Math.min(historyOffset, 20) + 5);
+
     // 1. Try server API /api/mixer-queue
     try {
-      const resp = await fetch(`/api/mixer-queue?videoId=${encodeURIComponent(src.videoId)}&title=${encodeURIComponent(src.title)}&count=${cleanCount + 5}`, {
+      const resp = await fetch(`/api/mixer-queue?videoId=${encodeURIComponent(src.videoId)}&title=${encodeURIComponent(src.title)}&count=${countToFetch}`, {
         signal: AbortSignal.timeout(4800)
       });
       if (resp.ok) {
@@ -2972,6 +3023,9 @@
       if (!item || !item.videoId) return false;
       if (existingQueueIds.has(item.videoId)) return false;
       if (item.lengthSeconds && item.lengthSeconds > MAX_VIDEO_DURATION_SECONDS) return false;
+      if (state.mixerNoDuplicate && state.mixerHistoryVideoIds && state.mixerHistoryVideoIds.has(item.videoId)) {
+        return false;
+      }
       return true;
     });
 
@@ -3027,10 +3081,14 @@
       state.localVotedSongIds.add(newItem.id);
       state.queue.push(newItem);
       itemsToAdd.push(newItem);
+      if (state.mixerHistoryVideoIds) {
+        state.mixerHistoryVideoIds.add(v.videoId);
+      }
       addedCount++;
     });
 
     if (addedCount > 0) {
+      saveMixerHistoryToStorage();
       saveLiveQueueToStorage();
       renderQueue();
       showToast(`🎉 Đã tự động mix thêm ${addedCount} bài nghe cùng vào hàng đợi!`);
@@ -5335,6 +5393,21 @@
       if (isNaN(val) || val < 1) val = 1;
       if (val > 50) val = 50;
       updateMixerCountUI(val);
+    });
+
+    document.getElementById('toggleMixerNoDuplicate')?.addEventListener('change', (e) => {
+      state.mixerNoDuplicate = e.target.checked;
+      try {
+        localStorage.setItem('hanzu_mixer_no_duplicate', state.mixerNoDuplicate ? 'true' : 'false');
+      } catch (_) {}
+      updateMixerHistoryUI();
+      showToast(state.mixerNoDuplicate ? '🔒 Đã BẬT: Các lần mix sau sẽ không trùng lặp bài cũ' : '🔓 Đã TẮT: Cho phép gợi ý lại các bài đã nghe');
+    });
+
+    document.getElementById('btnResetMixerHistory')?.addEventListener('click', () => {
+      if (state.mixerHistoryVideoIds) state.mixerHistoryVideoIds.clear();
+      saveMixerHistoryToStorage();
+      showToast('🔄 Đã xóa bộ nhớ bài cũ! Các lần mix tiếp theo có thể gợi ý lại từ đầu.');
     });
 
     document.getElementById('btnMixerAddNow')?.addEventListener('click', () => {

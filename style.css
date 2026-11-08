@@ -3902,3 +3902,54 @@ body.is-dragging-camera .seat-speech-bubble {
   color: #A78BFA;
   font-size: 0.9rem;
 }
+
+
+.sm-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 3px 0 6px;
+  padding: 5px 8px;
+  background: rgba(255, 255, 255, 0.035);
+  border-radius: 8px;
+  border: 1px dashed rgba(139, 92, 246, 0.3);
+}
+
+.sm-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.72rem;
+  color: #CBD5E1;
+  font-weight: 600;
+}
+
+.sm-toggle-checkbox {
+  width: 14px;
+  height: 14px;
+  accent-color: #8B5CF6;
+  cursor: pointer;
+  margin: 0;
+}
+
+.sm-toggle-text {
+  color: #E2E8F0;
+}
+
+.sm-reset-history-btn {
+  background: none;
+  border: none;
+  color: #93C5FD;
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  transition: color 0.15s;
+}
+
+.sm-reset-history-btn:hover {
+  color: #F87171;
+}
