@@ -470,7 +470,24 @@ const server = http.createServer(async (req, res) => {
       'Content-Type': 'application/json; charset=UTF-8',
       'Access-Control-Allow-Origin': '*'
     });
-    if (!vid) return res.end(JSON.stringify({ error: 'Missing video id' }));
+    if (!vid) return res.end(JSON.stringify({ error: 'Missing video id', available: false }));
+
+    // 0. Quick check: oEmbed status to detect deleted / private / invalid videos
+    let oembedStatus = 200;
+    try {
+      const oResp = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${encodeURIComponent(vid)}&format=json`, {
+        signal: AbortSignal.timeout(3000)
+      });
+      oembedStatus = oResp.status;
+    } catch (_) {}
+
+    if (oembedStatus === 404 || oembedStatus === 401 || oembedStatus === 400) {
+      return res.end(JSON.stringify({
+        videoId: vid,
+        available: false,
+        reason: 'Link video YouTube này không tồn tại, đã bị tác giả xóa hoặc đặt ở chế độ riêng tư (Unavailable).'
+      }));
+    }
 
     // 1. Try InnerTube Player API first (Fastest, authentic YouTube Web client emulation)
     const itInfo = await fetchInnerTubePlayer(vid);
@@ -497,6 +514,15 @@ const server = http.createServer(async (req, res) => {
       const isLive = html.includes('"isLive":true') || html.includes('"isLiveContent":true');
       const lengthSeconds = isLive ? 999999 : (lenMatch ? parseInt(lenMatch[1], 10) : null);
       const title = titleMatch ? titleMatch[1].replace(' - YouTube', '').trim() : '';
+
+      if (!title || title.toLowerCase().includes('video unavailable') || title.toLowerCase().includes('video không có sẵn')) {
+        return res.end(JSON.stringify({
+          videoId: vid,
+          available: false,
+          reason: 'Link video YouTube này không tồn tại, đã bị tác giả xóa hoặc đặt ở chế độ riêng tư (Unavailable).'
+        }));
+      }
+
       return res.end(JSON.stringify({
         videoId: vid,
         lengthSeconds,
