@@ -2689,19 +2689,7 @@
       }, 1200);
     }
 
-    // Safety watchdog: If video is blocked or unavailable and player stays unstarted, trigger unavailable warning
     clearTimeout(videoLoadWatchdogTimer);
-    videoLoadWatchdogTimer = setTimeout(() => {
-      if (!isShowingUnavailableModal && ytReady && ytPlayer) {
-        try {
-          const pState = typeof ytPlayer.getPlayerState === 'function' ? ytPlayer.getPlayerState() : -1;
-          const curTime = typeof ytPlayer.getCurrentTime === 'function' ? ytPlayer.getCurrentTime() : 0;
-          if ((pState === -1 || pState === 3) && curTime === 0 && !state.isPlaying) {
-            handleVideoPlayError(150);
-          }
-        } catch (_) {}
-      }
-    }, 6000);
 
     appendSystemChat(`🎬 Đang chiếu: "${state.currentVideo.title}" (Đề xuất bởi ${state.currentVideo.startedBy})`);
 
@@ -2838,9 +2826,12 @@
   }
 
   async function fetchYouTubeMetadata(videoId) {
-    let isUnavailable = false;
+    let title = null;
+    let channel = null;
+    let lengthSeconds = null;
+    let isLive = false;
 
-    // 0. Try local server video-info API first (returns exact lengthSeconds, title, isLive & availability)
+    // 0. Try local server video-info API first (returns exact lengthSeconds, title, isLive)
     try {
       const sResp = await fetch(`/api/video-info?id=${encodeURIComponent(videoId)}`, {
         signal: AbortSignal.timeout(3500)
@@ -2848,15 +2839,17 @@
       if (sResp.ok) {
         const sData = await sResp.json();
         if (sData) {
-          if (sData.available === false) {
-            return { title: null, channel: null, lengthSeconds: null, available: false };
+          if (sData.title) title = sData.title;
+          if (sData.lengthSeconds !== null && sData.lengthSeconds !== undefined) {
+            lengthSeconds = sData.lengthSeconds;
           }
-          if (sData.title || sData.lengthSeconds !== null) {
+          if (sData.isLive) isLive = !!sData.isLive;
+          if (title && lengthSeconds !== null) {
             return {
-              title: sData.title || null,
+              title,
               channel: 'YouTube Creator',
-              lengthSeconds: sData.lengthSeconds !== null ? sData.lengthSeconds : null,
-              isLive: !!sData.isLive,
+              lengthSeconds,
+              isLive,
               available: true
             };
           }
@@ -2864,17 +2857,17 @@
       }
     } catch (_) {}
 
-    // 1. Try official YouTube oEmbed API first (fastest, most reliable)
+    // 1. Try official YouTube oEmbed API
     try {
       const resp = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
-      if (resp.status === 404 || resp.status === 401 || resp.status === 400) {
-        isUnavailable = true;
-      } else if (resp.ok) {
+      if (resp.ok) {
         const data = await resp.json();
         if (data && data.title) {
           return {
             title: data.title,
             channel: data.author_name || 'YouTube Creator',
+            lengthSeconds: lengthSeconds,
+            isLive: isLive,
             available: true
           };
         }
@@ -2890,26 +2883,19 @@
           return {
             title: data2.title,
             channel: data2.author_name || 'YouTube Creator',
+            lengthSeconds: lengthSeconds,
+            isLive: isLive,
             available: true
           };
-        }
-        if (data2 && data2.error) {
-          isUnavailable = true;
         }
       }
     } catch (err2) {}
 
-    if (isUnavailable) {
-      return {
-        title: null,
-        channel: null,
-        available: false
-      };
-    }
-
     return {
-      title: `Video YouTube #${videoId}`,
-      channel: 'Khán giả đề xuất',
+      title: title || `Video YouTube #${videoId}`,
+      channel: channel || 'Khán giả đề xuất',
+      lengthSeconds: lengthSeconds,
+      isLive: isLive,
       available: true
     };
   }
@@ -3422,22 +3408,13 @@
   }
 
   async function addVideoToQueue(videoId, customTitle, customChannel, customLength) {
-    if (failedVideoIds.has(videoId)) {
-      showUnavailableVideoPopup(
-        customTitle || `ID: ${videoId}`,
-        'Video này đã được xác nhận là không thể phát trong rạp (do chặn bản quyền nhúng hoặc bị tác giả xóa). Bạn không thể đề xuất lại video này.',
-        () => {
-          const input = document.getElementById('inputYoutubeUrl');
-          if (input) { input.value = ''; input.focus(); }
-        }
-      );
-      return;
-    }
-
     if (state.queue.some((item) => item.videoId === videoId)) {
       showToast('⚡ Video này đã có trong danh sách bình chọn, hãy bấm Vote nhé!');
       return;
     }
+
+    // Allow user to re-add previously failed video if they choose
+    failedVideoIds.delete(videoId);
 
     let title = customTitle;
     let channel = customChannel;
@@ -3445,19 +3422,6 @@
 
     showToast('🔍 Đang kiểm tra link & thời lượng video...');
     const meta = await fetchYouTubeMetadata(videoId);
-    if (meta && meta.available === false) {
-      state.queue = (state.queue || []).filter((q) => q.videoId !== videoId);
-      renderQueue();
-      showUnavailableVideoPopup(
-        customTitle || `ID: ${videoId}`,
-        'Link video YouTube này không tồn tại, đã bị tác giả xóa hoặc đặt ở chế độ riêng tư (Unavailable). Bạn không được phép xem video này.',
-        () => {
-          const input = document.getElementById('inputYoutubeUrl');
-          if (input) { input.value = ''; input.focus(); }
-        }
-      );
-      return;
-    }
 
     if (meta) {
       if (!title && meta.title) title = meta.title;
@@ -5680,9 +5644,12 @@
     window.addEventListener('message', (event) => {
       try {
         if (!event.data) return;
+        if (event.origin && !event.origin.includes('youtube.com') && !event.origin.includes('youtube-nocookie.com')) {
+          return;
+        }
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-        if (data && (data.event === 'onError' || data.info?.errorCode)) {
-          const code = data.info?.errorCode || data.info || 150;
+        if (data && data.event === 'onError') {
+          const code = Number(data.info || 150);
           handleVideoPlayError(code);
         }
       } catch (_) {}

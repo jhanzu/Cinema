@@ -390,16 +390,15 @@ const server = http.createServer(async (req, res) => {
       const isLive = html.includes('"isLive":true') || html.includes('"isLiveContent":true');
       const lengthSeconds = isLive ? 999999 : (lenMatch ? parseInt(lenMatch[1], 10) : null);
       const title = titleMatch ? titleMatch[1].replace(' - YouTube', '').trim() : '';
-      const isUnavailable = html.includes('Video unavailable') || html.includes('"playabilityStatus":{"status":"UNPLAYABLE"') || html.includes('"status":"ERROR"');
       return res.end(JSON.stringify({
         videoId: vid,
         lengthSeconds,
         title,
         isLive,
-        available: !isUnavailable
+        available: true
       }));
     } catch (err) {
-      return res.end(JSON.stringify({ videoId: vid, lengthSeconds: null, error: err.message }));
+      return res.end(JSON.stringify({ videoId: vid, lengthSeconds: null, title: '', available: true, error: err.message }));
     }
   }
 
