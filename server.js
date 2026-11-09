@@ -514,13 +514,17 @@ const server = http.createServer(async (req, res) => {
     });
     if (!vid) return res.end(JSON.stringify({ error: 'Missing video id', available: false }));
 
-    // 0. Quick check: oEmbed status to detect deleted / private / invalid videos
+    // 0. Quick check: oEmbed status to detect deleted / private / invalid videos AND get pristine metadata
     let oembedStatus = 200;
+    let oembedData = null;
     try {
       const oResp = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${encodeURIComponent(vid)}&format=json`, {
         signal: AbortSignal.timeout(3000)
       });
       oembedStatus = oResp.status;
+      if (oResp.ok) {
+        oembedData = await oResp.json();
+      }
     } catch (_) {}
 
     if (oembedStatus === 404 || oembedStatus === 401 || oembedStatus === 400) {
@@ -538,25 +542,38 @@ const server = http.createServer(async (req, res) => {
       if (itInfo.isAgeRestricted) {
         return res.end(JSON.stringify({
           videoId: vid,
-          title: itInfo.title,
-          channel: itInfo.channel,
+          title: itInfo.title || (oembedData && oembedData.title) || null,
+          channel: itInfo.channel || (oembedData && oembedData.author_name) || 'YouTube Creator',
           lengthSeconds: itInfo.lengthSeconds || null,
           available: false,
           isAgeRestricted: true,
           reason: itInfo.reason || 'Video này bị giới hạn độ tuổi (18+) và yêu cầu đăng nhập xác nhận tuổi trên YouTube. Rạp chiếu phim không được phép chiếu video giới hạn độ tuổi.'
         }));
       }
-      if (itInfo.available && itInfo.title) {
+      if (itInfo.available && (itInfo.title || (oembedData && oembedData.title))) {
         return res.end(JSON.stringify({
           videoId: vid,
           lengthSeconds: itInfo.lengthSeconds,
-          title: itInfo.title,
-          channel: itInfo.channel,
-          isLive: itInfo.isLive,
+          title: itInfo.title || (oembedData && oembedData.title),
+          channel: itInfo.channel || (oembedData && oembedData.author_name) || 'YouTube Creator',
+          isLive: itInfo.isLive || false,
           available: true,
           isAgeRestricted: false
         }));
       }
+    }
+
+    // 1b. Instant pristine resolution from official YouTube oEmbed if available
+    if (oembedData && oembedData.title) {
+      return res.end(JSON.stringify({
+        videoId: vid,
+        lengthSeconds: null,
+        title: oembedData.title,
+        channel: oembedData.author_name || 'YouTube Creator',
+        isLive: false,
+        available: true,
+        isAgeRestricted: false
+      }));
     }
 
     // 2. Fallback to HTML watch page with Chrome browser headers
@@ -568,9 +585,12 @@ const server = http.createServer(async (req, res) => {
       const html = await resp.text();
       const lenMatch = html.match(/"lengthSeconds":"(\d+)"/);
       const titleMatch = html.match(/<title>([^<]+)<\/title>/);
+      const authorMatch = html.match(/"author":"([^"]+)"/) || html.match(/"channelTitle":"([^"]+)"/) || html.match(/<link itemprop="name" content="([^"]+)">/);
       const isLive = html.includes('"isLive":true') || html.includes('"isLiveContent":true');
       const lengthSeconds = isLive ? 999999 : (lenMatch ? parseInt(lenMatch[1], 10) : null);
-      const title = titleMatch ? titleMatch[1].replace(' - YouTube', '').trim() : '';
+      let title = titleMatch ? titleMatch[1].replace(' - YouTube', '').trim() : '';
+      if (!title && oembedData && oembedData.title) title = oembedData.title;
+      const channel = authorMatch ? authorMatch[1] : (oembedData?.author_name || 'YouTube Creator');
 
       // Check age restriction in watch page HTML: ONLY if explicit age indicators are present
       const isAgeRestrictedHtml =
@@ -583,6 +603,7 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({
           videoId: vid,
           title: title || '',
+          channel,
           available: false,
           isAgeRestricted: true,
           reason: 'Video này bị giới hạn độ tuổi (18+) và yêu cầu đăng nhập xác nhận tuổi trên YouTube. Rạp chiếu phim không được phép chiếu video giới hạn độ tuổi.'
@@ -602,12 +623,21 @@ const server = http.createServer(async (req, res) => {
         videoId: vid,
         lengthSeconds,
         title,
+        channel,
         isLive,
         available: true,
         isAgeRestricted: false
       }));
     } catch (err) {
-      return res.end(JSON.stringify({ videoId: vid, lengthSeconds: null, title: '', available: true, isAgeRestricted: false, error: err.message }));
+      return res.end(JSON.stringify({
+        videoId: vid,
+        lengthSeconds: null,
+        title: (oembedData && oembedData.title) || '',
+        channel: (oembedData && oembedData.author_name) || 'YouTube Creator',
+        available: true,
+        isAgeRestricted: false,
+        error: err.message
+      }));
     }
   }
 
@@ -1015,15 +1045,20 @@ function handleClientMessage(ws, data) {
     case 'ADD_QUEUE_BATCH': {
       if (!Array.isArray(data.items) || data.items.length === 0) return;
       let addedAny = false;
-      for (const item of data.items) {
-        if (!item || !item.videoId) continue;
-        if (item.isAgeRestricted) continue;
-        if (item.lengthSeconds && item.lengthSeconds > 480) continue;
-        if (!roomState.queue.some((q) => q.videoId === item.videoId || q.id === item.id)) {
+      for (const rawItem of data.items) {
+        if (!rawItem || !rawItem.videoId) continue;
+        if (rawItem.isAgeRestricted) continue;
+        if (rawItem.lengthSeconds && rawItem.lengthSeconds > 480) continue;
+        if (!roomState.queue.some((q) => q.videoId === rawItem.videoId || q.id === rawItem.id)) {
+          const isBadTitle = !rawItem.title || rawItem.title.startsWith('http') || rawItem.title.includes('youtube.com') || rawItem.title.includes('youtu.be');
+          const cleanTitle = !isBadTitle ? rawItem.title : `Video #${rawItem.videoId}`;
+          const cleanChannel = (rawItem.channel && rawItem.channel !== 'YouTube Creator') ? rawItem.channel : 'YouTube Creator';
           roomState.queue.push({
-            ...item,
-            addedByUserId: item.addedByUserId || ws.userId || null,
-            addedByClientId: item.addedByClientId || null
+            ...rawItem,
+            title: cleanTitle,
+            channel: cleanChannel,
+            addedByUserId: rawItem.addedByUserId || ws.userId || null,
+            addedByClientId: rawItem.addedByClientId || null
           });
           addedAny = true;
         }
@@ -1064,12 +1099,21 @@ function handleClientMessage(ws, data) {
         });
         return;
       }
+
+      const isBadTitle = !data.item.title || data.item.title.startsWith('http') || data.item.title.includes('youtube.com') || data.item.title.includes('youtu.be');
+      const cleanTitle = !isBadTitle ? data.item.title : `Video #${data.item.videoId}`;
+      const cleanChannel = (data.item.channel && data.item.channel !== 'YouTube Creator') ? data.item.channel : 'YouTube Creator';
+
+      const queueItem = {
+        ...data.item,
+        title: cleanTitle,
+        channel: cleanChannel,
+        addedByUserId: data.item.addedByUserId || ws.userId || null,
+        addedByClientId: data.item.addedByClientId || null
+      };
+
       if (!roomState.queue.some((q) => q.id === data.item.id)) {
-        roomState.queue.push({
-          ...data.item,
-          addedByUserId: data.item.addedByUserId || ws.userId || null,
-          addedByClientId: data.item.addedByClientId || null
-        });
+        roomState.queue.push(queueItem);
         if (!roomState.currentVideo || !roomState.currentVideo.videoId) {
           advanceRoomQueue('Chiếu ngay video vừa đề xuất');
         } else {
@@ -1077,6 +1121,45 @@ function handleClientMessage(ws, data) {
             type: 'QUEUE_UPDATE',
             queue: roomState.queue
           });
+        }
+
+        // Asynchronously resolve real title and author if missing or bad
+        if (isBadTitle || cleanChannel === 'YouTube Creator') {
+          (async () => {
+            try {
+              let resTitle = null;
+              let resChannel = null;
+              const it = await fetchInnerTubePlayer(data.item.videoId);
+              if (it && it.title) {
+                resTitle = it.title;
+                resChannel = it.channel;
+              }
+              if (!resTitle) {
+                const o = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${encodeURIComponent(data.item.videoId)}&format=json`).then(r => r.json());
+                resTitle = o?.title;
+                resChannel = o?.author_name;
+              }
+              if (resTitle) {
+                const target = roomState.queue.find((q) => q.id === queueItem.id);
+                if (target) {
+                  target.title = resTitle;
+                  if (resChannel) target.channel = resChannel;
+                  broadcast({
+                    type: 'QUEUE_UPDATE',
+                    queue: roomState.queue
+                  });
+                }
+                if (roomState.currentVideo && roomState.currentVideo.videoId === data.item.videoId && (!roomState.currentVideo.title || roomState.currentVideo.title.startsWith('http') || roomState.currentVideo.title.startsWith('Video #'))) {
+                  roomState.currentVideo.title = resTitle;
+                  if (resChannel) roomState.currentVideo.channel = resChannel;
+                  broadcast({
+                    type: 'QUEUE_UPDATE',
+                    queue: roomState.queue
+                  });
+                }
+              }
+            } catch (_) {}
+          })();
         }
       }
       break;

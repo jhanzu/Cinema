@@ -179,6 +179,11 @@
       const parsed = JSON.parse(raw);
       if (parsed && Array.isArray(parsed.queue) && Date.now() - (parsed.timestamp || 0) < 12 * 3600 * 1000) {
         parsed.queue = parsed.queue.filter((q) => q && q.id !== 'q-1' && q.addedBy !== 'Hanzu Cinema');
+        parsed.queue.forEach((item) => {
+          if (item && item.title && (item.title.startsWith('http') || item.title.includes('youtube.com') || item.title.includes('youtu.be'))) {
+            item.title = `Video #${item.videoId}`;
+          }
+        });
         return parsed;
       }
     } catch (_) {}
@@ -2749,10 +2754,17 @@
       if (state.history.length > 20) state.history.pop();
     }
 
+    const isBadPlayingTitle = !videoObj.title || videoObj.title.startsWith('http') || videoObj.title.includes('youtube.com') || videoObj.title.includes('youtu.be');
+    const safePlayingTitle = !isBadPlayingTitle
+      ? videoObj.title
+      : (videoObj.channel && videoObj.channel !== 'YouTube Cinema' && videoObj.channel !== 'YouTube Creator'
+          ? `${videoObj.channel} - ${videoObj.videoId}`
+          : `Video #${videoObj.videoId}`);
+
     state.currentVideo = {
       id: videoObj.id || null,
       videoId: videoObj.videoId,
-      title: videoObj.title,
+      title: safePlayingTitle,
       channel: videoObj.channel || 'YouTube Cinema',
       startedBy: videoObj.startedBy || videoObj.addedBy || state.me.name,
       addedBy: videoObj.addedBy || videoObj.startedBy || state.me.name,
@@ -2775,6 +2787,18 @@
     hideVideoRescueCard();
     if (metaEl) {
       metaEl.textContent = `${state.currentVideo.channel} • Chọn bởi ${state.currentVideo.startedBy}`;
+    }
+
+    if (isBadPlayingTitle || !state.currentVideo.channel || state.currentVideo.channel === 'YouTube Creator') {
+      fetchYouTubeMetadata(videoObj.videoId).then((res) => {
+        if (res && res.title && !res.title.startsWith('http') && state.currentVideo && state.currentVideo.videoId === videoObj.videoId) {
+          state.currentVideo.title = res.title;
+          if (res.channel) state.currentVideo.channel = res.channel;
+          if (titleEl) titleEl.textContent = res.title;
+          if (screenTitleEl) screenTitleEl.textContent = res.title;
+          if (metaEl) metaEl.textContent = `${state.currentVideo.channel} • Chọn bởi ${state.currentVideo.startedBy}`;
+        }
+      }).catch(() => {});
     }
 
     updateAmbilightColors(state.currentVideo.ambilight);
@@ -2923,8 +2947,15 @@
 
     if (state.queue && state.queue.length > 0) {
       const nextVid = state.queue[0];
-      titleEl.textContent = nextVid.title || 'Bài tiếp theo';
-      metaEl.textContent = `${nextVid.channel || 'YouTube'} • Đề cử bởi ${nextVid.addedBy || 'Khán giả'} (${nextVid.votes || 0} vote)`;
+      const isUrl = !nextVid.title || nextVid.title.startsWith('http') || nextVid.title.includes('youtube.com') || nextVid.title.includes('youtu.be');
+      const displayTitle = !isUrl
+        ? nextVid.title
+        : (nextVid.channel && nextVid.channel !== 'YouTube Creator' && nextVid.channel !== 'Khán giả đề xuất'
+            ? `${nextVid.channel} - ${nextVid.videoId}`
+            : `🎵 Đang lấy tên bài hát (${nextVid.videoId})...`);
+      const displayChannel = (nextVid.channel && nextVid.channel !== 'YouTube Creator') ? nextVid.channel : 'YouTube';
+      titleEl.textContent = displayTitle;
+      metaEl.textContent = `${displayChannel} • Đề cử bởi ${nextVid.addedBy || 'Khán giả'} (${nextVid.votes || 0} vote)`;
       if (nextCard) nextCard.classList.remove('is-empty');
     } else {
       titleEl.textContent = 'Hàng đợi đang trống';
@@ -2985,7 +3016,12 @@
               reason: sData.reason || (sData.isAgeRestricted ? 'Video này bị giới hạn độ tuổi (18+) và yêu cầu đăng nhập xác nhận tuổi trên YouTube.' : 'Link video YouTube này không tồn tại, đã bị tác giả xóa hoặc đặt ở chế độ riêng tư (Unavailable).')
             };
           }
-          if (sData.title) title = sData.title;
+          if (sData.title && !sData.title.startsWith('http') && !sData.title.includes('youtube.com')) {
+            title = sData.title;
+          }
+          if (sData.channel && sData.channel !== 'YouTube Creator' && sData.channel !== 'Khán giả đề xuất') {
+            channel = sData.channel;
+          }
           if (sData.lengthSeconds !== null && sData.lengthSeconds !== undefined) {
             lengthSeconds = sData.lengthSeconds;
           }
@@ -2993,7 +3029,7 @@
           if (title) {
             return {
               title,
-              channel: sData.channel || 'YouTube Creator',
+              channel: channel || sData.channel || 'YouTube Creator',
               lengthSeconds: lengthSeconds || null,
               isLive,
               available: true,
@@ -3057,8 +3093,8 @@
     } catch (err2) {}
 
     return {
-      title: title || `Video YouTube #${videoId}`,
-      channel: channel || 'Khán giả đề xuất',
+      title: (title && !title.startsWith('http') && !title.includes('youtube.com') && !title.includes('youtu.be')) ? title : `Video YouTube #${videoId}`,
+      channel: (channel && channel !== 'Khán giả đề xuất') ? channel : 'YouTube Creator',
       lengthSeconds: lengthSeconds,
       isLive: isLive,
       available: true
@@ -3462,6 +3498,43 @@
     if (sfx && typeof sfx.playChatPop === 'function') sfx.playChatPop();
   }
 
+  const queueMetaResolvingIds = new Set();
+  async function resolveQueueItemMetadata(item) {
+    if (!item || !item.videoId || queueMetaResolvingIds.has(item.id)) return;
+    queueMetaResolvingIds.add(item.id);
+    try {
+      const meta = await fetchYouTubeMetadata(item.videoId);
+      if (meta && meta.title && !meta.title.startsWith('http') && !meta.title.includes('youtube.com') && !meta.title.includes('youtu.be')) {
+        item.title = meta.title;
+        if (meta.channel && meta.channel !== 'YouTube Creator' && meta.channel !== 'Khán giả đề xuất') {
+          item.channel = meta.channel;
+        }
+        // Update DOM element directly if exists
+        const cardEl = document.querySelector(`[data-queue-card-id="${item.id}"]`);
+        if (cardEl) {
+          const tEl = cardEl.querySelector('.queue-title');
+          if (tEl) {
+            tEl.textContent = item.title;
+            tEl.title = item.title;
+          }
+          const subSpan = cardEl.querySelector('.queue-sub span:first-child');
+          if (subSpan && item.channel) {
+            subSpan.textContent = item.channel;
+          }
+          const imgEl = cardEl.querySelector('.queue-thumb-wrap img');
+          if (imgEl) {
+            imgEl.alt = item.title;
+          }
+        }
+        saveLiveQueueToStorage();
+        updateNextPlayingUI();
+      }
+    } catch (_) {}
+    finally {
+      queueMetaResolvingIds.delete(item.id);
+    }
+  }
+
   function renderQueue() {
     sortQueue();
     updateNextPlayingUI();
@@ -3482,6 +3555,15 @@
       return;
     }
 
+    // Auto-resolve any legacy URL titles or placeholder titles in queue
+    state.queue.forEach((item) => {
+      const isUrl = !item.title || item.title.startsWith('http') || item.title.includes('youtube.com') || item.title.includes('youtu.be');
+      const isPlaceholder = isUrl || item.title.startsWith('Video #') || !item.channel || item.channel === 'YouTube Creator';
+      if (isPlaceholder && !queueMetaResolvingIds.has(item.id)) {
+        resolveQueueItemMetadata(item);
+      }
+    });
+
     const totalOccupants = Object.keys(getOccupantMap()).length;
     const isSolo = totalOccupants <= 1;
 
@@ -3491,17 +3573,26 @@
         const hasVoted = state.localVotedSongIds.has(item.id);
         const thumbUrl = `https://i.ytimg.com/vi/${item.videoId}/mqdefault.jpg`;
         const isSelected = state.selectedQueueItemIds.has(item.id);
+
+        const isUrlTitle = !item.title || item.title.startsWith('http') || item.title.includes('youtube.com') || item.title.includes('youtu.be');
+        const displayTitle = !isUrlTitle
+          ? item.title
+          : (item.channel && item.channel !== 'YouTube Creator' && item.channel !== 'Khán giả đề xuất'
+              ? `${item.channel} - ${item.videoId}`
+              : `🎵 Đang lấy tên bài hát (${item.videoId})...`);
+        const displayChannel = (item.channel && item.channel !== 'YouTube Creator') ? item.channel : 'YouTube Creator';
+
         return `
           <div class="queue-card ${isTop ? 'top-rank' : ''} ${state.queueSelectMode ? 'select-mode' : ''} ${isSelected ? 'is-selected' : ''}" data-queue-card-id="${item.id}">
             ${state.queueSelectMode ? `<input type="checkbox" class="queue-select-cb" data-select-id="${item.id}" ${isSelected ? 'checked' : ''} />` : ''}
             <div class="queue-thumb-wrap">
-              <img src="${thumbUrl}" alt="${escapeHtml(item.title)}" loading="lazy" />
+              <img src="${thumbUrl}" alt="${escapeHtml(displayTitle)}" loading="lazy" />
               <span class="rank-tag">${isTop ? '👑 #1 Sắp chiếu' : `#${idx + 1}`}</span>
             </div>
             <div class="queue-details">
-              <div class="queue-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
+              <div class="queue-title" title="${escapeHtml(displayTitle)}">${escapeHtml(displayTitle)}</div>
               <div class="queue-sub">
-                <span>${escapeHtml(item.channel)}</span>
+                <span>${escapeHtml(displayChannel)}</span>
                 <span>•</span>
                 <span>${escapeHtml(item.addedBy)}</span>
               </div>
@@ -3578,8 +3669,13 @@
       return;
     }
 
-    let title = customTitle;
-    let channel = customChannel;
+    // Never accept a raw URL as customTitle!
+    let title = (customTitle && typeof customTitle === 'string' && !customTitle.startsWith('http') && !customTitle.includes('youtube.com') && !customTitle.includes('youtu.be'))
+      ? customTitle.trim()
+      : null;
+    let channel = (customChannel && typeof customChannel === 'string' && customChannel !== 'YouTube Creator' && customChannel !== 'Khán giả đề xuất')
+      ? customChannel.trim()
+      : null;
     let lengthSeconds = (customLength !== undefined && customLength !== null) ? customLength : null;
 
     showToast('🔍 Đang kiểm tra link & tính khả dụng video...');
@@ -3614,8 +3710,14 @@
     }
 
     if (meta) {
-      if (!title && meta.title) title = meta.title;
-      if (!channel && meta.channel) channel = meta.channel;
+      if (meta.title && !meta.title.startsWith('http') && !meta.title.includes('youtube.com') && !meta.title.includes('youtu.be')) {
+        title = meta.title;
+      }
+      if (meta.channel && meta.channel !== 'YouTube Creator' && meta.channel !== 'Khán giả đề xuất') {
+        channel = meta.channel;
+      } else if (!channel && meta.channel) {
+        channel = meta.channel;
+      }
       if (lengthSeconds === null && meta.lengthSeconds !== null && meta.lengthSeconds !== undefined) {
         lengthSeconds = meta.lengthSeconds;
       }
@@ -3661,7 +3763,9 @@
       return;
     }
 
-    title = title || `Video #${videoId}`;
+    title = (title && !title.startsWith('http') && !title.includes('youtube.com') && !title.includes('youtu.be'))
+      ? title
+      : `Video #${videoId}`;
     channel = channel || 'YouTube Creator';
 
     const newItem = {
@@ -3682,6 +3786,10 @@
     renderQueue();
     showToast(`✅ Đã thêm "${title}" vào danh sách bình chọn!`);
     showSeatSpeechBubble(state.me.seat, `Vừa đề xuất bài mới, vote nha! 🎵`, 4200);
+
+    if (title.startsWith('Video #') || channel === 'YouTube Creator') {
+      resolveQueueItemMetadata(newItem);
+    }
 
     const input = document.getElementById('inputYoutubeUrl');
     if (input) input.value = '';
