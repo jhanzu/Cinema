@@ -886,8 +886,8 @@
         <!-- Unavailable Video Warning Pop-up Modal -->
         <div class="modal-backdrop" id="unavailableVideoModal">
           <div class="modal-card unavailable-modal-card">
-            <div class="uv-icon">🚫</div>
-            <div class="modal-title uv-title">Video Không Thể Xem (Unavailable)</div>
+            <div class="uv-icon" id="uvModalIcon">🚫</div>
+            <div class="modal-title uv-title" id="uvModalTitle">Video Không Thể Xem (Unavailable)</div>
             <div class="uv-body" id="uvModalMessage">
               Link video YouTube này hiện không khả dụng để trình chiếu. Bạn không được phép xem video này.
             </div>
@@ -1968,22 +1968,32 @@
 
     if (isSender) {
       isShowingUnavailableModal = true;
-      let errText = 'Chủ sở hữu video hoặc YouTube không cho phép phát video này trên website bên ngoài (Chặn nhúng bản quyền hoặc giới hạn khu vực).';
-      if (errCode === 100) {
-        errText = 'Video đã bị tác giả xóa, chuyển sang chế độ riêng tư hoặc liên kết không tồn tại trên YouTube.';
-      } else if (errCode === 2) {
-        errText = 'Đường link hoặc ID video YouTube này không đúng định dạng.';
-      } else if (errCode === 5) {
-        errText = 'Không thể phát nội dung này trong trình phát HTML5 của trình duyệt.';
-      }
-
-      showUnavailableVideoPopup(
-        currentVid.title || `Video #${failedVidId}`,
-        errText,
-        () => {
-          isShowingUnavailableModal = false;
+      if (currentVid.isAgeRestricted) {
+        showAgeRestrictedVideoPopup(
+          currentVid.title || `Video #${failedVidId}`,
+          'Video này bị giới hạn độ tuổi (18+) và yêu cầu đăng nhập tài khoản YouTube để xác nhận độ tuổi. Rạp chiếu phim không được phép chiếu video này.',
+          () => {
+            isShowingUnavailableModal = false;
+          }
+        );
+      } else {
+        let errText = 'Chủ sở hữu video hoặc YouTube không cho phép phát video này trên website bên ngoài (Chặn nhúng bản quyền hoặc giới hạn khu vực).';
+        if (errCode === 100) {
+          errText = 'Video đã bị tác giả xóa, chuyển sang chế độ riêng tư hoặc liên kết không tồn tại trên YouTube.';
+        } else if (errCode === 2) {
+          errText = 'Đường link hoặc ID video YouTube này không đúng định dạng.';
+        } else if (errCode === 5) {
+          errText = 'Không thể phát nội dung này trong trình phát HTML5 của trình duyệt.';
         }
-      );
+
+        showUnavailableVideoPopup(
+          currentVid.title || `Video #${failedVidId}`,
+          errText,
+          () => {
+            isShowingUnavailableModal = false;
+          }
+        );
+      }
     } else {
       // Với những khán giả khác: Không hiện pop-up làm gián đoạn, chỉ hiện thông báo toast nhẹ nhàng
       showToast(`⚠️ Video "${currentVid.title || 'này'}" bị hạn chế bản quyền/không thể xem nên hệ thống đã tự động gỡ khỏi rạp.`);
@@ -2201,17 +2211,66 @@
   // =========================================================================
   // UNAVAILABLE VIDEO WARNING POPUP NOTIFICATION (Warning & Confirm)
   // =========================================================================
-  // UNAVAILABLE VIDEO WARNING POPUP NOTIFICATION (Warning & Confirm)
+  // UNAVAILABLE & AGE RESTRICTED VIDEO WARNING POPUP NOTIFICATIONS
   // =========================================================================
   let unavailableConfirmCallback = null;
 
-  function showUnavailableVideoPopup(videoTitle, reasonMessage, onConfirm) {
+  function showAgeRestrictedVideoPopup(videoTitle, reasonMessage, onConfirm) {
     const modal = document.getElementById('unavailableVideoModal');
+    const iconEl = document.getElementById('uvModalIcon');
+    const titleEl = document.getElementById('uvModalTitle');
     const msgEl = document.getElementById('uvModalMessage');
+    const btnEl = document.getElementById('btnConfirmUnavailableVideo');
     if (!modal) return;
 
     unavailableConfirmCallback = onConfirm || null;
     isShowingUnavailableModal = true;
+
+    if (iconEl) iconEl.textContent = '🔞';
+    if (titleEl) {
+      titleEl.textContent = 'Video Giới Hạn Độ Tuổi (18+)';
+      titleEl.style.color = '#EF4444';
+    }
+    if (btnEl) {
+      btnEl.innerHTML = '✅ Đã Hiểu • Chọn Bài Khác';
+      btnEl.style.background = 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)';
+    }
+
+    if (msgEl) {
+      const cleanTitle = videoTitle ? `"${escapeHtml(videoTitle)}"` : 'này';
+      msgEl.innerHTML = `
+        Video <strong>${cleanTitle}</strong> là video <strong>giới hạn độ tuổi (18+)</strong> và yêu cầu đăng nhập tài khoản YouTube để xác nhận độ tuổi.<br>
+        Theo quy định của rạp chiếu phim, nội dung giới hạn độ tuổi <strong>không được phép trình chiếu</strong> trong phòng rạp.<br><br>
+        <span style="color:#FCA5A5;font-weight:700;">⚠️ Video này không được phép chiếu trong rạp. Vui lòng chọn bài khác!</span>
+      `;
+    }
+
+    modal.classList.add('open');
+    if (sfx && typeof sfx.playSeatSwitch === 'function') {
+      sfx.playSeatSwitch();
+    }
+  }
+
+  function showUnavailableVideoPopup(videoTitle, reasonMessage, onConfirm) {
+    const modal = document.getElementById('unavailableVideoModal');
+    const iconEl = document.getElementById('uvModalIcon');
+    const titleEl = document.getElementById('uvModalTitle');
+    const msgEl = document.getElementById('uvModalMessage');
+    const btnEl = document.getElementById('btnConfirmUnavailableVideo');
+    if (!modal) return;
+
+    unavailableConfirmCallback = onConfirm || null;
+    isShowingUnavailableModal = true;
+
+    if (iconEl) iconEl.textContent = '🚫';
+    if (titleEl) {
+      titleEl.textContent = 'Video Không Thể Xem (Unavailable)';
+      titleEl.style.color = '#F87171';
+    }
+    if (btnEl) {
+      btnEl.innerHTML = '✅ Đồng Ý';
+      btnEl.style.background = '';
+    }
 
     if (msgEl) {
       const cleanTitle = videoTitle ? `"${escapeHtml(videoTitle)}"` : 'này';
@@ -2908,21 +2967,22 @@
     let lengthSeconds = null;
     let isLive = false;
 
-    // 0. Try local server video-info API first (returns exact lengthSeconds, title, isLive, availability)
+    // 0. Try local server video-info API first (returns exact lengthSeconds, title, isLive, availability, age restriction)
     try {
       const sResp = await fetch(`/api/video-info?id=${encodeURIComponent(videoId)}`, {
-        signal: AbortSignal.timeout(3500)
+        signal: AbortSignal.timeout(4000)
       });
       if (sResp.ok) {
         const sData = await sResp.json();
         if (sData) {
-          if (sData.available === false) {
+          if (sData.available === false || sData.isAgeRestricted === true) {
             return {
               title: sData.title || null,
-              channel: null,
-              lengthSeconds: null,
+              channel: sData.channel || null,
+              lengthSeconds: sData.lengthSeconds || null,
               available: false,
-              reason: sData.reason || 'Link video YouTube này không tồn tại, đã bị tác giả xóa hoặc đặt ở chế độ riêng tư (Unavailable).'
+              isAgeRestricted: !!sData.isAgeRestricted,
+              reason: sData.reason || (sData.isAgeRestricted ? 'Video này bị giới hạn độ tuổi (18+) và yêu cầu đăng nhập xác nhận tuổi trên YouTube.' : 'Link video YouTube này không tồn tại, đã bị tác giả xóa hoặc đặt ở chế độ riêng tư (Unavailable).')
             };
           }
           if (sData.title) title = sData.title;
@@ -2936,7 +2996,8 @@
               channel: sData.channel || 'YouTube Creator',
               lengthSeconds,
               isLive,
-              available: true
+              available: true,
+              isAgeRestricted: false
             };
           }
         }
@@ -3524,20 +3585,31 @@
     showToast('🔍 Đang kiểm tra link & tính khả dụng video...');
     const meta = await fetchYouTubeMetadata(videoId);
 
-    // 1. Immediate unavailable check from server/oEmbed
-    if (meta && meta.available === false) {
+    // 1. Immediate unavailable or age-restricted check from server/oEmbed
+    if (meta && (meta.available === false || meta.isAgeRestricted === true)) {
       failedVideoIds.add(videoId);
       state.queue = (state.queue || []).filter((q) => q.videoId !== videoId);
       renderQueue();
       saveLiveQueueToStorage();
-      showUnavailableVideoPopup(
-        title || `ID: ${videoId}`,
-        meta.reason || 'Link video YouTube này không tồn tại, đã bị tác giả xóa hoặc đặt ở chế độ riêng tư (Unavailable). Bạn không được phép xem video này.',
-        () => {
-          const input = document.getElementById('inputYoutubeUrl');
-          if (input) { input.value = ''; input.focus(); }
-        }
-      );
+      if (meta.isAgeRestricted || /giới hạn độ tuổi|18\+|xác nhận tuổi|age-restricted|inappropriate|phù hợp/i.test(meta.reason || '')) {
+        showAgeRestrictedVideoPopup(
+          title || meta.title || `Video #${videoId}`,
+          meta.reason,
+          () => {
+            const input = document.getElementById('inputYoutubeUrl');
+            if (input) { input.value = ''; input.focus(); }
+          }
+        );
+      } else {
+        showUnavailableVideoPopup(
+          title || meta.title || `ID: ${videoId}`,
+          meta.reason || 'Link video YouTube này không tồn tại, đã bị tác giả xóa hoặc đặt ở chế độ riêng tư (Unavailable). Bạn không được phép xem video này.',
+          () => {
+            const input = document.getElementById('inputYoutubeUrl');
+            if (input) { input.value = ''; input.focus(); }
+          }
+        );
+      }
       return;
     }
 
@@ -4247,6 +4319,15 @@
         break;
 
       case 'USER_JOINED':
+        break;
+
+      case 'VIDEO_AGE_RESTRICTED_REJECTED':
+        showAgeRestrictedVideoPopup(data.title, data.message, () => {
+          const input = document.getElementById('inputYoutubeUrl');
+          if (input) { input.value = ''; input.focus(); }
+        });
+        break;
+
       case 'VIDEO_LIMIT_REJECTED':
         showVideoLimitPopup(data.title, data.lengthSeconds, () => {
           const input = document.getElementById('inputYoutubeUrl');

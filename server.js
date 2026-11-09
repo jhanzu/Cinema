@@ -235,14 +235,52 @@ async function fetchInnerTubePlayer(videoId) {
     });
     if (res.ok) {
       const data = await res.json();
-      if (data && data.videoDetails) {
+      const ps = data?.playabilityStatus;
+
+      if (ps) {
+        const status = ps.status || '';
+        const reason = ps.reason || '';
+        const errorScreenSubreason =
+          ps.errorScreen?.playerErrorMessageRenderer?.subreason?.runs?.[0]?.text ||
+          ps.errorScreen?.playerErrorMessageRenderer?.subreason?.simpleText ||
+          '';
+        const errorScreenReason =
+          ps.errorScreen?.playerErrorMessageRenderer?.reason?.runs?.[0]?.text ||
+          ps.errorScreen?.playerErrorMessageRenderer?.reason?.simpleText ||
+          '';
+        const fullReason = `${reason} ${errorScreenReason} ${errorScreenSubreason}`.trim();
+
+        // Check for Age Restriction:
+        // 1. desktopLegacyAgeGateReason exists (e.g. 1)
+        // 2. status === 'LOGIN_REQUIRED' with reason mentioning age/tuổi/inappropriate/xác nhận
+        // 3. Any LOGIN_REQUIRED status (embed players cannot log into user accounts)
+        const isAgeRestricted =
+          !!ps.desktopLegacyAgeGateReason ||
+          status === 'LOGIN_REQUIRED' ||
+          /tuổi|age|xác nhận|confirm your age|inappropriate|phù hợp|giới hạn độ tuổi|nhạy cảm/i.test(fullReason);
+
+        if (isAgeRestricted) {
+          return {
+            videoId,
+            title: data.videoDetails?.title || '',
+            channel: data.videoDetails?.author || 'YouTube Creator',
+            lengthSeconds: data.videoDetails?.lengthSeconds ? parseInt(data.videoDetails.lengthSeconds, 10) : null,
+            available: false,
+            isAgeRestricted: true,
+            reason: 'Video này bị giới hạn độ tuổi (18+) và yêu cầu đăng nhập xác nhận tuổi trên YouTube. Rạp chiếu phim không được phép chiếu video giới hạn độ tuổi.'
+          };
+        }
+      }
+
+      if (data && data.videoDetails && (!data.playabilityStatus || data.playabilityStatus.status === 'OK')) {
         const d = data.videoDetails;
         return {
           title: d.title || '',
           channel: d.author || 'YouTube Creator',
           lengthSeconds: d.lengthSeconds ? parseInt(d.lengthSeconds, 10) : null,
           isLive: !!d.isLiveContent,
-          available: true
+          available: true,
+          isAgeRestricted: false
         };
       }
     }
@@ -485,21 +523,36 @@ const server = http.createServer(async (req, res) => {
       return res.end(JSON.stringify({
         videoId: vid,
         available: false,
+        isAgeRestricted: false,
         reason: 'Link video YouTube này không tồn tại, đã bị tác giả xóa hoặc đặt ở chế độ riêng tư (Unavailable).'
       }));
     }
 
     // 1. Try InnerTube Player API first (Fastest, authentic YouTube Web client emulation)
     const itInfo = await fetchInnerTubePlayer(vid);
-    if (itInfo && itInfo.title) {
-      return res.end(JSON.stringify({
-        videoId: vid,
-        lengthSeconds: itInfo.lengthSeconds,
-        title: itInfo.title,
-        channel: itInfo.channel,
-        isLive: itInfo.isLive,
-        available: true
-      }));
+    if (itInfo) {
+      if (itInfo.isAgeRestricted) {
+        return res.end(JSON.stringify({
+          videoId: vid,
+          title: itInfo.title,
+          channel: itInfo.channel,
+          lengthSeconds: itInfo.lengthSeconds || null,
+          available: false,
+          isAgeRestricted: true,
+          reason: itInfo.reason || 'Video này bị giới hạn độ tuổi (18+) và yêu cầu đăng nhập xác nhận tuổi trên YouTube. Rạp chiếu phim không được phép chiếu video giới hạn độ tuổi.'
+        }));
+      }
+      if (itInfo.available && itInfo.title) {
+        return res.end(JSON.stringify({
+          videoId: vid,
+          lengthSeconds: itInfo.lengthSeconds,
+          title: itInfo.title,
+          channel: itInfo.channel,
+          isLive: itInfo.isLive,
+          available: true,
+          isAgeRestricted: false
+        }));
+      }
     }
 
     // 2. Fallback to HTML watch page with Chrome browser headers
@@ -515,10 +568,29 @@ const server = http.createServer(async (req, res) => {
       const lengthSeconds = isLive ? 999999 : (lenMatch ? parseInt(lenMatch[1], 10) : null);
       const title = titleMatch ? titleMatch[1].replace(' - YouTube', '').trim() : '';
 
+      // Check age restriction in watch page HTML:
+      const isAgeRestrictedHtml =
+        html.includes('itemprop="isFamilyFriendly" content="false"') ||
+        html.includes('desktopLegacyAgeGateReason') ||
+        html.includes('"isAgeRestricted":true') ||
+        html.includes('"isAgeGate":true') ||
+        (html.includes('"LOGIN_REQUIRED"') && /tuổi|age|xác nhận|confirm your age|inappropriate|phù hợp/i.test(html));
+
+      if (isAgeRestrictedHtml) {
+        return res.end(JSON.stringify({
+          videoId: vid,
+          title: title || '',
+          available: false,
+          isAgeRestricted: true,
+          reason: 'Video này bị giới hạn độ tuổi (18+) và yêu cầu đăng nhập xác nhận tuổi trên YouTube. Rạp chiếu phim không được phép chiếu video giới hạn độ tuổi.'
+        }));
+      }
+
       if (!title || title.toLowerCase().includes('video unavailable') || title.toLowerCase().includes('video không có sẵn')) {
         return res.end(JSON.stringify({
           videoId: vid,
           available: false,
+          isAgeRestricted: false,
           reason: 'Link video YouTube này không tồn tại, đã bị tác giả xóa hoặc đặt ở chế độ riêng tư (Unavailable).'
         }));
       }
@@ -528,10 +600,11 @@ const server = http.createServer(async (req, res) => {
         lengthSeconds,
         title,
         isLive,
-        available: true
+        available: true,
+        isAgeRestricted: false
       }));
     } catch (err) {
-      return res.end(JSON.stringify({ videoId: vid, lengthSeconds: null, title: '', available: true, error: err.message }));
+      return res.end(JSON.stringify({ videoId: vid, lengthSeconds: null, title: '', available: true, isAgeRestricted: false, error: err.message }));
     }
   }
 
@@ -941,6 +1014,7 @@ function handleClientMessage(ws, data) {
       let addedAny = false;
       for (const item of data.items) {
         if (!item || !item.videoId) continue;
+        if (item.isAgeRestricted) continue;
         if (item.lengthSeconds && item.lengthSeconds > 480) continue;
         if (!roomState.queue.some((q) => q.videoId === item.videoId || q.id === item.id)) {
           roomState.queue.push({
@@ -966,6 +1040,16 @@ function handleClientMessage(ws, data) {
 
     case 'ADD_QUEUE': {
       if (!data.item || !data.item.videoId) return;
+      // Age restriction check
+      if (data.item.isAgeRestricted) {
+        ws.send({
+          type: 'VIDEO_AGE_RESTRICTED_REJECTED',
+          videoId: data.item.videoId,
+          title: data.item.title,
+          message: 'Video này bị giới hạn độ tuổi (18+) và không được phép phát trong rạp.'
+        });
+        return;
+      }
       // Duration limit: max 480 seconds (8 minutes)
       if (data.item.lengthSeconds && data.item.lengthSeconds > 480) {
         ws.send({

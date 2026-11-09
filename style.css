@@ -850,6 +850,13 @@ body.is-dragging-camera iframe,
   transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
+#btnScreenExternalYt,
+#btnScreenExternalYt span {
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  flex-shrink: 0 !important;
+}
+
 .yt-btn:hover {
   background: rgba(255, 255, 255, 0.16);
   color: #C084FC;
