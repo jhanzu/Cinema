@@ -248,18 +248,21 @@ async function fetchInnerTubePlayer(videoId) {
           ps.errorScreen?.playerErrorMessageRenderer?.reason?.runs?.[0]?.text ||
           ps.errorScreen?.playerErrorMessageRenderer?.reason?.simpleText ||
           '';
-        const fullReason = `${reason} ${errorScreenReason} ${errorScreenSubreason}`.trim();
+        const fullReason = `${reason} ${errorScreenReason} ${errorScreenSubreason}`.toLowerCase();
 
-        // Check for Age Restriction:
-        // 1. desktopLegacyAgeGateReason exists (e.g. 1)
-        // 2. status === 'LOGIN_REQUIRED' with reason mentioning age/tuổi/inappropriate/xác nhận
-        // 3. Any LOGIN_REQUIRED status (embed players cannot log into user accounts)
-        const isAgeRestricted =
-          !!ps.desktopLegacyAgeGateReason ||
-          status === 'LOGIN_REQUIRED' ||
-          /tuổi|age|xác nhận|confirm your age|inappropriate|phù hợp|giới hạn độ tuổi|nhạy cảm/i.test(fullReason);
+        // Strict Age Restriction Check:
+        // Must have desktopLegacyAgeGateReason (e.g. 1) OR explicit age-restriction phrasing
+        const hasAgeKeyword =
+          fullReason.includes('xác nhận tuổi') ||
+          fullReason.includes('giới hạn độ tuổi') ||
+          fullReason.includes('confirm your age') ||
+          fullReason.includes('age-restricted') ||
+          fullReason.includes('phù hợp với một số người xem') ||
+          fullReason.includes('dưới 18 tuổi');
 
-        if (isAgeRestricted) {
+        const isTrueAgeRestricted = !!ps.desktopLegacyAgeGateReason || (status === 'LOGIN_REQUIRED' && hasAgeKeyword);
+
+        if (isTrueAgeRestricted) {
           return {
             videoId,
             title: data.videoDetails?.title || '',
@@ -272,7 +275,8 @@ async function fetchInnerTubePlayer(videoId) {
         }
       }
 
-      if (data && data.videoDetails && (!data.playabilityStatus || data.playabilityStatus.status === 'OK')) {
+      // If videoDetails is present and NOT true age-restricted, return video metadata immediately!
+      if (data && data.videoDetails && data.videoDetails.title) {
         const d = data.videoDetails;
         return {
           title: d.title || '',
@@ -568,13 +572,12 @@ const server = http.createServer(async (req, res) => {
       const lengthSeconds = isLive ? 999999 : (lenMatch ? parseInt(lenMatch[1], 10) : null);
       const title = titleMatch ? titleMatch[1].replace(' - YouTube', '').trim() : '';
 
-      // Check age restriction in watch page HTML:
+      // Check age restriction in watch page HTML: ONLY if explicit age indicators are present
       const isAgeRestrictedHtml =
-        html.includes('itemprop="isFamilyFriendly" content="false"') ||
-        html.includes('desktopLegacyAgeGateReason') ||
+        (html.includes('itemprop="isFamilyFriendly" content="false"') && html.includes('desktopLegacyAgeGateReason')) ||
         html.includes('"isAgeRestricted":true') ||
         html.includes('"isAgeGate":true') ||
-        (html.includes('"LOGIN_REQUIRED"') && /tuổi|age|xác nhận|confirm your age|inappropriate|phù hợp/i.test(html));
+        (html.includes('"LOGIN_REQUIRED"') && /xác nhận tuổi|giới hạn độ tuổi|confirm your age|dưới 18 tuổi/i.test(html));
 
       if (isAgeRestrictedHtml) {
         return res.end(JSON.stringify({

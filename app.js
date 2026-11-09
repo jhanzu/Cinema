@@ -2990,11 +2990,11 @@
             lengthSeconds = sData.lengthSeconds;
           }
           if (sData.isLive) isLive = !!sData.isLive;
-          if (title && lengthSeconds !== null) {
+          if (title) {
             return {
               title,
               channel: sData.channel || 'YouTube Creator',
-              lengthSeconds,
+              lengthSeconds: lengthSeconds || null,
               isLive,
               available: true,
               isAgeRestricted: false
@@ -3591,7 +3591,7 @@
       state.queue = (state.queue || []).filter((q) => q.videoId !== videoId);
       renderQueue();
       saveLiveQueueToStorage();
-      if (meta.isAgeRestricted || /giới hạn độ tuổi|18\+|xác nhận tuổi|age-restricted|inappropriate|phù hợp/i.test(meta.reason || '')) {
+      if (meta.isAgeRestricted === true || /giới hạn độ tuổi|18\+|xác nhận tuổi|confirm your age|age-restricted/i.test(meta.reason || '')) {
         showAgeRestrictedVideoPopup(
           title || meta.title || `Video #${videoId}`,
           meta.reason,
