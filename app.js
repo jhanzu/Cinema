@@ -1032,7 +1032,7 @@
     const seenUserIds = new Set();
     seenUserIds.add(state.me.id);
 
-    // Peers from other tabs/clients (only active, fresh peers)
+    // Peers from other tabs/clients (only active, fresh seated peers)
     Object.values(state.peers).forEach((p) => {
       if (!p || !p.seat || p.id === state.me.id) return;
       if (seenUserIds.has(p.id)) return; // Prevent duplicate entries for same user
@@ -1052,9 +1052,32 @@
       map[p.seat] = { ...p, isMe: false };
     });
 
-    // Local user always overrides their chosen seat
-    map[state.me.seat] = { ...state.me, isMe: true };
+    // Local user only occupies seat if they have an active seat assigned
+    if (state.me.seat) {
+      map[state.me.seat] = { ...state.me, isMe: true };
+    }
     return map;
+  }
+
+  /**
+   * Return a complete list of all active viewers in the theater (both seated and standing)
+   */
+  function getAllOccupantsList() {
+    const list = [];
+    const seen = new Set();
+    list.push({ ...state.me, isMe: true });
+    seen.add(state.me.id);
+
+    const now = Date.now();
+    Object.values(state.peers).forEach((p) => {
+      if (!p || !p.id || seen.has(p.id)) return;
+      const lastSeen = peerLastSeen[p.id] || p.lastSeen || now;
+      if (now - lastSeen < 25000) {
+        list.push({ ...p, isMe: false });
+        seen.add(p.id);
+      }
+    });
+    return list;
   }
 
   /**
@@ -1063,8 +1086,8 @@
   function isNameTaken(name, excludeUserId = null) {
     if (!name) return false;
     const clean = String(name).trim().toLowerCase();
-    const occupants = getOccupantMap();
-    return Object.values(occupants).some((occ) => {
+    const all = getAllOccupantsList();
+    return all.some((occ) => {
       if (!occ || !occ.name) return false;
       if (excludeUserId && occ.id === excludeUserId) return false;
       return occ.name.trim().toLowerCase() === clean;
@@ -1123,18 +1146,20 @@
           if (person.isMe) {
             node3D.classList.add('my-seat');
             node3D.title = `Ghế ${code} của bạn (${person.name}) • Nhấp để đứng/đổi ghế`;
+            const cleanAvatar = sanitizeAvatarUrl(person.avatar);
             if (chairBadgeEl) {
               chairBadgeEl.className = 'chair-name-badge my-badge';
-              const avTagMy = person.avatar ? `<img src="${person.avatar}" class="chair-badge-avatar" />` : `<span style="font-size:0.74rem;">${person.emoji || '😎'}</span>`;
+              const avTagMy = cleanAvatar ? `<img src="${cleanAvatar}" class="chair-badge-avatar" />` : `<span style="font-size:0.74rem;">${person.emoji || '😎'}</span>`;
               chairBadgeEl.innerHTML = `${avTagMy} <span>${escapeHtml(person.name)}</span> <span class="cnb-tag" style="color:#FDE047;font-size:0.65rem;font-weight:700;margin-left:2px;">(Bạn)</span>`;
               chairBadgeEl.style.display = 'inline-flex';
             }
           } else {
             node3D.classList.add('occupied', 'occupied-peer');
             node3D.title = `Ghế ${code} — Đã có "${person.name}" ngồi (Không thể chọn)`;
+            const cleanAvatar = sanitizeAvatarUrl(person.avatar);
             if (chairBadgeEl) {
               chairBadgeEl.className = 'chair-name-badge peer-badge';
-              const avTagPeer = person.avatar ? `<img src="${person.avatar}" class="chair-badge-avatar" />` : `<span style="font-size:0.74rem;">${person.emoji || '👤'}</span>`;
+              const avTagPeer = cleanAvatar ? `<img src="${cleanAvatar}" class="chair-badge-avatar" />` : `<span style="font-size:0.74rem;">${person.emoji || '👤'}</span>`;
               chairBadgeEl.innerHTML = `${avTagPeer} <span>${escapeHtml(person.name)}</span>`;
               chairBadgeEl.style.display = 'inline-flex';
             }
@@ -1145,19 +1170,20 @@
           const gender = person.gender || 'male';
           const genderIcon = gender === 'female' ? '👩' : (gender === 'other' ? '✨' : '👨');
           const hairHtml = gender === 'female' ? '<div class="block-hair-female"></div>' : '';
+          const cleanAvatar = sanitizeAvatarUrl(person.avatar);
 
           slot.innerHTML = `
             ${bubbleHtml}
             <div class="block-mannequin mannequin-${gender} ${person.isMe ? 'is-me' : 'is-peer'}" style="--char-color:${person.color || '#3B82F6'}">
               <div class="mannequin-nametag">
                 <span class="mannequin-gender">${genderIcon}</span>
-                ${person.avatar ? `<img src="${person.avatar}" class="mannequin-avatar-img" />` : `<span class="mannequin-emoji">${person.emoji || '😎'}</span>`}
+                ${cleanAvatar ? `<img src="${cleanAvatar}" class="mannequin-avatar-img" />` : `<span class="mannequin-emoji">${person.emoji || '😎'}</span>`}
                 <span class="mannequin-name">${escapeHtml(person.name)}</span>
               </div>
               <div class="block-head-wrap">
                 ${hairHtml}
                 <div class="block-head">
-                  ${person.avatar ? `<div class="block-face block-face-photo-wrap"><img src="${person.avatar}" class="block-face-photo" /></div>` : `<div class="block-face">${person.emoji || '😎'}</div>`}
+                  ${cleanAvatar ? `<div class="block-face block-face-photo-wrap"><img src="${cleanAvatar}" class="block-face-photo" /></div>` : `<div class="block-face">${person.emoji || '😎'}</div>`}
                   <div class="block-glasses-3d"></div>
                 </div>
               </div>
@@ -1190,12 +1216,21 @@
     });
 
     // Update top nav & screen counters
-    const totalOccupied = Object.keys(occupants).length;
+    const allPeople = getAllOccupantsList();
+    const seatedCount = allPeople.filter((p) => p.seat).length;
+    const standingCount = allPeople.filter((p) => !p.seat).length;
+
     const onlineEl = document.getElementById('onlineCountText');
-    if (onlineEl) onlineEl.textContent = `${totalOccupied} / 100 ghế`;
+    if (onlineEl) {
+      if (standingCount > 0) {
+        onlineEl.textContent = `${seatedCount}/100 ghế • ${standingCount} vé đứng`;
+      } else {
+        onlineEl.textContent = `${seatedCount} / 100 ghế`;
+      }
+    }
 
     const myNavSeat = document.getElementById('myNavSeat');
-    if (myNavSeat) myNavSeat.textContent = state.me.seat;
+    if (myNavSeat) myNavSeat.textContent = state.me.seat ? state.me.seat : 'Vé đứng';
     const myNavName = document.getElementById('myNavName');
     if (myNavName) myNavName.textContent = state.me.name;
     const myNavEmoji = document.getElementById('myNavEmoji');
@@ -1215,11 +1250,19 @@
     const myNavGender = document.getElementById('myNavGender');
     if (myNavGender) myNavGender.textContent = state.me.gender === 'female' ? '👩' : (state.me.gender === 'other' ? '✨' : '👨');
     const screenSeatStatus = document.getElementById('screenSeatStatus');
-    if (screenSeatStatus) screenSeatStatus.textContent = `GHẾ CỦA BẠN: ${state.me.seat}`;
+    if (screenSeatStatus) {
+      screenSeatStatus.textContent = state.me.seat
+        ? `GHẾ CỦA BẠN: ${state.me.seat}`
+        : 'BẠN ĐANG XEM Ở CHẾ ĐỘ VÉ ĐỨNG (RẠP ĐÃ KÍN 100 CHỖ)';
+    }
     const chatInput = document.getElementById('inputChatMessage');
-    if (chatInput) chatInput.placeholder = `Nhắn gì đó (sẽ hiện trên đầu ghế ${state.me.seat})...`;
+    if (chatInput) {
+      chatInput.placeholder = state.me.seat
+        ? `Nhắn gì đó (sẽ hiện trên đầu ghế ${state.me.seat})...`
+        : 'Nhắn gì đó vào phòng chiếu...';
+    }
 
-    if (state.activeTab === 'seats') {
+    if (state.activeTab === 'seats' || document.getElementById('seatGrid2D')) {
       render2DSeatMap(occupants);
     }
     updateSkipVoteUI();
@@ -1250,9 +1293,17 @@
     }
 
     const prevSeat = state.me.seat;
+    state.lastConfirmedSeat = prevSeat || state.lastConfirmedSeat || null;
     state.me.seat = seatCode;
     saveProfileToStorage();
     sfx.playSeatSwitch();
+
+    const myNavSeat = document.getElementById('myNavSeat');
+    if (myNavSeat) myNavSeat.textContent = seatCode;
+    const screenSeatStatus = document.getElementById('screenSeatStatus');
+    if (screenSeatStatus) screenSeatStatus.textContent = `GHẾ CỦA BẠN: ${seatCode}`;
+    const previewSeat = document.getElementById('previewSeat');
+    if (previewSeat) previewSeat.textContent = seatCode;
 
     // Reset head look offsets on seat change
     state.povHeadYaw = 0;
@@ -1266,7 +1317,7 @@
     }
 
     if (!silent && prevSeat !== seatCode) {
-      showToast(`💺 Bạn đã chuyển sang ngồi Ghế ${seatCode}`);
+      showToast(prevSeat ? `💺 Bạn đã chuyển sang ngồi Ghế ${seatCode}` : `💺 Bạn đã có chỗ ngồi tại Ghế ${seatCode}!`);
       showSeatSpeechBubble(seatCode, `Mình ngồi ghế ${seatCode} nha! 👋`, 3600);
       broadcastSync({ type: 'SEAT_CHANGE', seat: seatCode, user: state.me });
     }
@@ -1283,7 +1334,7 @@
         }
       });
     });
-    if (candidates.length === 0) return 'J10';
+    if (candidates.length === 0) return null;
     return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
@@ -2015,7 +2066,7 @@
 
     // 1. Try server search-alt endpoint (powered by authentic YouTube InnerTube API)
     try {
-      const resp = await fetch(`/api/search-alt?q=${encodeURIComponent(cleanTitle)}&exclude=${encodeURIComponent(failedId)}`, {
+      const resp = await fetch(`${getApiBaseUrl()}/api/search-alt?q=${encodeURIComponent(cleanTitle)}&exclude=${encodeURIComponent(failedId)}`, {
         signal: AbortSignal.timeout(4000)
       });
       if (resp.ok) {
@@ -3000,7 +3051,7 @@
 
     // 0. Try local server video-info API first (returns exact lengthSeconds, title, isLive, availability, age restriction)
     try {
-      const sResp = await fetch(`/api/video-info?id=${encodeURIComponent(videoId)}`, {
+      const sResp = await fetch(`${getApiBaseUrl()}/api/video-info?id=${encodeURIComponent(videoId)}`, {
         signal: AbortSignal.timeout(4000)
       });
       if (sResp.ok) {
@@ -3200,7 +3251,7 @@
 
     // 1. Try server API /api/mixer-queue
     try {
-      const resp = await fetch(`/api/mixer-queue?videoId=${encodeURIComponent(src.videoId)}&title=${encodeURIComponent(src.title)}&count=${countToFetch}`, {
+      const resp = await fetch(`${getApiBaseUrl()}/api/mixer-queue?videoId=${encodeURIComponent(src.videoId)}&title=${encodeURIComponent(src.title)}&count=${countToFetch}`, {
         signal: AbortSignal.timeout(4800)
       });
       if (resp.ok) {
@@ -3807,17 +3858,26 @@
     const item = state.queue.find((q) => q.id === itemId);
     if (!item) return;
 
+    let isUpvote = false;
     if (state.localVotedSongIds.has(itemId)) {
       item.votes = Math.max(0, item.votes - 1);
       state.localVotedSongIds.delete(itemId);
+      isUpvote = false;
     } else {
       item.votes += 1;
       state.localVotedSongIds.add(itemId);
+      isUpvote = true;
       sfx.playReactionPop();
     }
 
+    sortQueue();
     renderQueue();
-    broadcastSync({ type: 'VOTE_QUEUE', queue: state.queue });
+    broadcastSync({
+      type: 'VOTE_QUEUE',
+      itemId,
+      isUpvote,
+      queue: state.queue
+    });
   }
 
   function forcePlayQueueItem(itemId) {
@@ -3841,7 +3901,7 @@
       queue: state.queue,
       reason: `Chiếu ngay bởi ${state.me.name}`
     });
-    loadAndPlayVideo(picked, true);
+    loadAndPlayVideo(picked, false);
   }
 
   function playNextFromQueue(reasonText) {
@@ -3975,7 +4035,9 @@
     });
 
     // 4. Kiểm tra ngưỡng đủ để tiến hành skip
-    if (state.skipVotes.size >= required) {
+    // When connected to WebSocket, the server authoritatively advances the queue on SKIP_VOTE to prevent double-skipping
+    const isWsActive = wsClient && wsClient.readyState === WebSocket.OPEN;
+    if (!isWsActive && state.skipVotes.size >= required) {
       const totalViewers = Object.keys(getOccupantMap()).length || 1;
       const pct = Math.round((state.skipVotes.size / totalViewers) * 100);
       const reason = `Đã đủ ${state.skipVotes.size}/${required} phiếu (${pct}% khán giả đồng ý)`;
@@ -3987,6 +4049,7 @@
   // 9. LIVE CHAT, 3D SPEECH BUBBLES & SEAT REACTION CANNONS
   // =========================================================================
   function showSeatSpeechBubble(seatCode, text, duration = 6000) {
+    if (!seatCode) return; // Standing viewers have no 3D chair; their chat appears in the chat stream
     if (state.seatBubbles[seatCode] && state.seatBubbles[seatCode].timer) {
       clearTimeout(state.seatBubbles[seatCode].timer);
     }
@@ -4005,7 +4068,10 @@
   let lastLocalReactionBroadcastTime = 0;
 
   function spawnSeatReaction3D(seatCode, emojiIcon, broadcast = true, playSound = true) {
-    const seatNode = document.getElementById(`seat-3d-${seatCode}`);
+    let seatNode = seatCode ? document.getElementById(`seat-3d-${seatCode}`) : null;
+    if (!seatNode) {
+      seatNode = document.getElementById('cinemaScreenFrame') || document.getElementById('theaterWorld');
+    }
     if (!seatNode) return;
 
     const now = Date.now();
@@ -4067,7 +4133,8 @@
       color: state.me.color,
       text,
       time: getCurrentTimeStr(),
-      isMe: true
+      isMe: true,
+      _sentAt: Date.now()
     };
 
     state.messages.push(msg);
@@ -4099,13 +4166,14 @@
         if (m.type === 'system') {
           return `<div class="chat-system-notice">${escapeHtml(m.text)}</div>`;
         }
+        const cleanChatAvatar = sanitizeAvatarUrl(m.avatar);
         return `
           <div class="chat-msg ${m.isMe ? 'is-me' : ''}">
-            <div class="chat-avatar" style="background:${m.color}">${m.avatar ? `<img src="${m.avatar}" class="chat-avatar-img" />` : (m.emoji || '👤')}</div>
+            <div class="chat-avatar" style="background:${m.color}">${cleanChatAvatar ? `<img src="${cleanChatAvatar}" class="chat-avatar-img" />` : (m.emoji || '👤')}</div>
             <div class="chat-bubble-wrap">
               <div class="chat-header-line">
                 <span class="chat-author">${escapeHtml(m.author)}</span>
-                <span class="chat-seat-tag" data-focus-seat="${m.seat}" title="Xem vị trí ghế ${m.seat} trong rạp">Ghế ${m.seat}</span>
+                ${m.seat ? `<span class="chat-seat-tag" data-focus-seat="${m.seat}" title="Xem vị trí ghế ${m.seat} trong rạp">Ghế ${m.seat}</span>` : `<span class="chat-seat-tag" style="background:rgba(156,163,175,0.2);color:#9ca3af;border:1px dashed rgba(156,163,175,0.4);" title="Khán giả xem ở chế độ vé đứng (Rạp kín 100 ghế)">Vé đứng</span>`}
                 <span class="chat-time">${m.time}</span>
               </div>
               <div class="chat-text">${escapeHtml(m.text)}</div>
@@ -4181,19 +4249,34 @@
       });
     });
 
-    const people = Object.values(occupants);
-    roster.innerHTML = people
+    const allPeople = getAllOccupantsList();
+    const seatedCount = allPeople.filter((p) => p.seat).length;
+    const standingCount = allPeople.filter((p) => !p.seat).length;
+
+    const onlineEl = document.getElementById('onlineCountText');
+    if (onlineEl) {
+      if (standingCount > 0) {
+        onlineEl.textContent = `${seatedCount}/100 ghế • ${standingCount} vé đứng`;
+      } else {
+        onlineEl.textContent = `${seatedCount} / 100 ghế`;
+      }
+    }
+
+    roster.innerHTML = allPeople
       .map(
-        (p) => `
-        <div class="roster-row" data-roster-seat="${p.seat}">
+        (p) => {
+          const cleanP = sanitizeAvatarUrl(p.avatar);
+          return `
+        <div class="roster-row" data-roster-seat="${p.seat || ''}">
           <div style="display:flex;align-items:center;gap:8px;">
-            ${p.avatar ? `<img src="${p.avatar}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;vertical-align:middle;border:1px solid rgba(255,255,255,0.4);" />` : `<span style="font-size:1.05rem;">${p.emoji || '😎'}</span>`}
+            ${cleanP ? `<img src="${cleanP}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;vertical-align:middle;border:1px solid rgba(255,255,255,0.4);" />` : `<span style="font-size:1.05rem;">${p.emoji || '😎'}</span>`}
             <strong>${escapeHtml(p.name)}</strong>
             ${p.isMe ? '<span style="font-size:0.66rem;color:#FBBF24;font-weight:700;">(Bạn)</span>' : ''}
           </div>
-          <span class="chat-seat-tag" data-jump-seat="${p.seat}" title="Xem vị trí ghế ${p.seat}">Ghế ${p.seat}</span>
+          ${p.seat ? `<span class="chat-seat-tag" data-jump-seat="${p.seat}" title="Xem vị trí ghế ${p.seat}">Ghế ${p.seat}</span>` : `<span class="chat-seat-tag" style="background:rgba(156,163,175,0.2);color:#9ca3af;border:1px dashed rgba(156,163,175,0.4);" title="Khán giả xem ở chế độ vé đứng (Rạp kín 100 ghế)">Vé đứng</span>`}
         </div>
-      `
+      `;
+        }
       )
       .join('');
   }
@@ -4252,7 +4335,7 @@
   function handleIncomingSyncData(data) {
     if (!data || !data.type) return;
     if (data.from === state.clientId || data.senderId === state.clientId) return;
-    if (data.userId && data.userId === state.me.id && data.type !== 'ROOM_SYNC') return;
+    if (data.userId && data.userId === state.me.id && data.type !== 'ROOM_SYNC' && data.type !== 'PROFILE_UPDATED') return;
 
     switch (data.type) {
       case 'REQUEST_ROOM_SYNC':
@@ -4367,11 +4450,21 @@
 
       case 'ROOM_SYNC':
         // Full room sync from server when entering
-        if (data.assignedSeat && data.assignedSeat !== state.me.seat) {
+        if (data.assignedSeat !== undefined) {
+          state.lastConfirmedSeat = data.assignedSeat;
           state.me.seat = data.assignedSeat;
           saveProfileToStorage();
           const seatPill = document.getElementById('myNavSeat');
-          if (seatPill) seatPill.textContent = data.assignedSeat;
+          if (seatPill) seatPill.textContent = data.assignedSeat ? data.assignedSeat : 'Vé đứng';
+          const screenSeat = document.getElementById('screenSeatStatus');
+          if (screenSeat) {
+            screenSeat.textContent = data.assignedSeat
+              ? `GHẾ CỦA BẠN: ${data.assignedSeat}`
+              : 'BẠN ĐANG XEM Ở CHẾ ĐỘ VÉ ĐỨNG (RẠP ĐÃ KÍN 100 CHỖ)';
+          }
+          if (!data.assignedSeat) {
+            showToast('🎟️ Rạp đã kín 100 ghế! Bạn đang xem ở Chế độ Vé Đứng (vẫn xem phim, nghe nhạc và chat bình thường). Khi có ai rời rạp, bạn có thể bấm vào ghế trống để ngồi!');
+          }
         }
         if (data.assignedName && data.assignedName !== state.me.name) {
           state.me.name = data.assignedName;
@@ -4383,7 +4476,7 @@
           state.peers = {};
           const now = Date.now();
           Object.values(data.occupants).forEach((occ) => {
-            if (occ.id !== state.me.id && occ.seat) {
+            if (occ && occ.id !== state.me.id) {
               state.peers[occ.id] = { ...occ, lastSeen: now };
               peerLastSeen[occ.id] = now;
             }
@@ -4401,6 +4494,7 @@
           }
 
           refreshSeatsVisuals();
+          render2DSeatMap(getOccupantMap());
         }
         if (Array.isArray(data.queue)) {
           state.queue = data.queue;
@@ -4427,6 +4521,19 @@
         break;
 
       case 'USER_JOINED':
+        if (data.user && data.user.id && data.user.id !== state.me.id) {
+          state.peers[data.user.id] = data.user;
+          peerLastSeen[data.user.id] = Date.now();
+          refreshSeatsVisuals();
+          render2DSeatMap(getOccupantMap());
+          updateSkipVoteUI();
+          if (data.user.seat) {
+            showSeatSpeechBubble(data.user.seat, `👋 Chào cả rạp, mình vừa vào ngồi ghế ${data.user.seat}!`, 4200);
+            showToast(`👋 Khán giả "${data.user.name}" vừa vào rạp (Ghế ${data.user.seat})!`);
+          } else {
+            showToast(`👋 Khán giả "${data.user.name}" vừa vào rạp (Vé đứng - Rạp kín chỗ)!`);
+          }
+        }
         break;
 
       case 'VIDEO_AGE_RESTRICTED_REJECTED':
@@ -4452,9 +4559,14 @@
           state.peers[data.user.id] = data.user;
           peerLastSeen[data.user.id] = Date.now();
           refreshSeatsVisuals();
+          render2DSeatMap(getOccupantMap());
           updateSkipVoteUI();
-          showSeatSpeechBubble(data.user.seat, `👋 Chào cả rạp, mình vừa vào ngồi ghế ${data.user.seat}!`, 4200);
-          showToast(`👋 Khán giả "${data.user.name}" vừa vào rạp (Ghế ${data.user.seat})!`);
+          if (data.user.seat) {
+            showSeatSpeechBubble(data.user.seat, `👋 Chào cả rạp, mình vừa vào ngồi ghế ${data.user.seat}!`, 4200);
+            showToast(`👋 Khán giả "${data.user.name}" vừa vào rạp (Ghế ${data.user.seat})!`);
+          } else {
+            showToast(`👋 Khán giả "${data.user.name}" vừa vào rạp (Vé đứng - Rạp kín chỗ)!`);
+          }
 
           // Reply with live room state across all networks so new peer syncs immediately!
           broadcastSync({
@@ -4482,6 +4594,7 @@
             state.skipVotes.delete(leavingId);
           }
           refreshSeatsVisuals();
+          render2DSeatMap(getOccupantMap());
           updateSkipVoteUI();
           showToast(`Khán giả "${departingUser.name || 'Một người bạn'}" đã rời khỏi rạp.`);
         }
@@ -4489,44 +4602,84 @@
       }
 
       case 'SEAT_CHANGE':
-        if (data.userId && data.seat) {
+        if (data.userId) {
           if (data.user) {
-            state.peers[data.userId] = { ...(state.peers[data.userId] || {}), ...data.user, seat: data.seat };
+            state.peers[data.userId] = { ...(state.peers[data.userId] || {}), ...data.user, seat: data.seat || null };
           } else if (state.peers[data.userId]) {
-            state.peers[data.userId].seat = data.seat;
+            state.peers[data.userId].seat = data.seat || null;
           }
           refreshSeatsVisuals();
+          render2DSeatMap(getOccupantMap());
           updateSkipVoteUI();
-          showSeatSpeechBubble(data.seat, `Khán giả vừa chuyển sang ghế ${data.seat}!`, 3500);
+          if (data.seat) {
+            showSeatSpeechBubble(data.seat, `Khán giả vừa chuyển sang ghế ${data.seat}!`, 3500);
+          }
         }
         break;
 
       case 'PROFILE_UPDATED':
         if (data.userId && data.user) {
-          state.peers[data.userId] = { ...(state.peers[data.userId] || {}), ...data.user };
-          refreshSeatsVisuals();
-          updateSkipVoteUI();
-          showToast(`✨ Khán giả "${data.user.name}" vừa cập nhật hồ sơ!`);
+          if (data.userId === state.me.id) {
+            state.me.name = data.user.name;
+            if (data.user.gender) state.me.gender = data.user.gender;
+            if (data.user.color) state.me.color = data.user.color;
+            if (data.user.emoji) state.me.emoji = data.user.emoji;
+            saveProfileToStorage();
+            updateProfilePreview();
+            refreshSeatsVisuals();
+            render2DSeatMap(getOccupantMap());
+            const myNavName = document.getElementById('myNavName');
+            if (myNavName) myNavName.textContent = data.user.name;
+          } else {
+            state.peers[data.userId] = { ...(state.peers[data.userId] || {}), ...data.user };
+            refreshSeatsVisuals();
+            render2DSeatMap(getOccupantMap());
+            updateSkipVoteUI();
+            showToast(`✨ Khán giả "${data.user.name}" vừa cập nhật hồ sơ!`);
+          }
         }
         break;
 
-      case 'SEAT_TAKEN_ERROR':
-        showToast(`⚠️ ${data.message || 'Ghế đã có người ngồi!'}`);
+      case 'SEAT_TAKEN_ERROR': {
+        const fallback = state.lastConfirmedSeat || findRandomFreeSeat(data.seat);
+        state.me.seat = fallback || null;
+        saveProfileToStorage();
+        const seatPill = document.getElementById('myNavSeat');
+        if (seatPill) seatPill.textContent = state.me.seat ? state.me.seat : 'Vé đứng';
+        const screenSeat = document.getElementById('screenSeatStatus');
+        if (screenSeat) {
+          screenSeat.textContent = state.me.seat
+            ? `GHẾ CỦA BẠN: ${state.me.seat}`
+            : 'BẠN ĐANG XEM Ở CHẾ ĐỘ VÉ ĐỨNG (RẠP ĐÃ KÍN 100 CHỖ)';
+        }
+        refreshSeatsVisuals();
+        render2DSeatMap(getOccupantMap());
+        if (state.cameraMode === 'pov') {
+          applyCameraTransform();
+        }
+        showToast(`⚠️ ${data.message || 'Ghế đã có người ngồi!'} ${state.me.seat ? `Đã đưa bạn về ghế ${state.me.seat}.` : 'Hiện tại rạp đã kín 100 ghế, bạn chuyển về chế độ vé đứng.'}`);
         break;
+      }
 
       case 'CHAT_MSG':
         if (data.msg) {
-          state.messages.push(data.msg);
-          renderChatMessages(false);
-          if (data.msg.seat) {
-            showSeatSpeechBubble(data.msg.seat, data.msg.text, 6200);
+          const isDup = state.messages.some(
+            (m) => (m.id && data.msg.id && m.id === data.msg.id) ||
+                   (m.isMe && m.text === data.msg.text && Math.abs(Date.now() - (m._sentAt || 0)) < 4000)
+          );
+          if (!isDup) {
+            state.messages.push(data.msg);
+            renderChatMessages(false);
+            if (data.msg.seat) {
+              showSeatSpeechBubble(data.msg.seat, data.msg.text, 6200);
+            }
+            sfx.playChatPop();
           }
-          sfx.playChatPop();
         }
         break;
 
       case 'REACTION':
-        if (data.seat && data.emoji) {
+        if (data.emoji) {
           spawnSeatReaction3D(data.seat, data.emoji, false, true);
         }
         break;
@@ -4549,9 +4702,51 @@
         }
         break;
 
+      case 'VOTE_QUEUE':
+      case 'VOTE_QUEUE_ITEM':
+        if (data.itemId && !Array.isArray(data.queue)) {
+          const item = state.queue.find((q) => q.id === data.itemId);
+          if (item) {
+            item.votes = typeof data.isUpvote === 'boolean'
+              ? (data.isUpvote ? (item.votes || 0) + 1 : Math.max(0, (item.votes || 1) - 1))
+              : (item.votes || 0) + 1;
+            sortQueue();
+            renderQueue();
+            updateSkipVoteUI();
+          }
+        } else if (Array.isArray(data.queue)) {
+          state.queue = data.queue;
+          renderQueue();
+          updateSkipVoteUI();
+        }
+        break;
+
+      case 'CURRENT_VIDEO_UPDATE':
+        if (data.currentVideo && state.currentVideo && state.currentVideo.videoId === data.currentVideo.videoId) {
+          state.currentVideo.title = data.currentVideo.title;
+          if (data.currentVideo.channel) state.currentVideo.channel = data.currentVideo.channel;
+          const titleEl = document.getElementById('hudVideoTitle');
+          const screenTitleEl = document.getElementById('screenTopTitle');
+          const metaEl = document.getElementById('hudVideoMeta');
+          if (titleEl) titleEl.textContent = state.currentVideo.title;
+          if (screenTitleEl) screenTitleEl.textContent = state.currentVideo.title;
+          if (metaEl) metaEl.textContent = `${state.currentVideo.channel} • Chọn bởi ${state.currentVideo.startedBy}`;
+        }
+        break;
+
       case 'ADD_QUEUE':
       case 'ADD_QUEUE_BATCH':
       case 'QUEUE_UPDATE':
+        if (data.currentVideo && state.currentVideo && state.currentVideo.videoId === data.currentVideo.videoId) {
+          state.currentVideo.title = data.currentVideo.title;
+          if (data.currentVideo.channel) state.currentVideo.channel = data.currentVideo.channel;
+          const titleEl = document.getElementById('hudVideoTitle');
+          const screenTitleEl = document.getElementById('screenTopTitle');
+          const metaEl = document.getElementById('hudVideoMeta');
+          if (titleEl) titleEl.textContent = state.currentVideo.title;
+          if (screenTitleEl) screenTitleEl.textContent = state.currentVideo.title;
+          if (metaEl) metaEl.textContent = `${state.currentVideo.channel} • Chọn bởi ${state.currentVideo.startedBy}`;
+        }
         if (Array.isArray(data.queue)) {
           state.queue = data.queue;
           renderQueue();
@@ -4731,6 +4926,14 @@
       return `${proto}//${host}/ws`;
     }
     return null;
+  }
+
+  function getApiBaseUrl() {
+    const wsUrl = currentWsUrl || getTargetWsUrl();
+    if (wsUrl && !wsUrl.includes('localhost') && !wsUrl.includes('127.0.0.1')) {
+      return wsUrl.replace(/^wss:/i, 'https:').replace(/^ws:/i, 'http:').replace(/\/ws\/?$/i, '');
+    }
+    return '';
   }
 
   function updateServerStatusUI(status) {
@@ -4987,13 +5190,17 @@
     // Sidebar quick random seat button
     document.getElementById('btnSidebarRandomSeat')?.addEventListener('click', () => {
       const free = findRandomFreeSeat(state.me.seat);
+      if (!free) {
+        showToast('🎟️ Hiện tại rạp đã kín toàn bộ 100 ghế! Không còn ghế trống.');
+        return;
+      }
       selectSeat(free);
     });
 
     // Jump to / highlight viewer's seat on roster click
     document.getElementById('audienceRosterContainer')?.addEventListener('click', (e) => {
       const jumpBtn = e.target.closest('[data-jump-seat]');
-      if (jumpBtn) {
+      if (jumpBtn && jumpBtn.dataset.jumpSeat) {
         focusOnSeat(jumpBtn.dataset.jumpSeat);
       }
     });
@@ -5658,7 +5865,7 @@
 
       if (pName) pName.textContent = state.me.name || 'Khán giả';
       if (pGender) pGender.textContent = state.me.gender === 'female' ? '👩' : (state.me.gender === 'other' ? '✨' : '👨');
-      if (pSeat) pSeat.textContent = state.me.seat || 'E5';
+      if (pSeat) pSeat.textContent = state.me.seat ? state.me.seat : 'Vé đứng (Rạp kín 100 ghế)';
 
       if (state.me.avatar) {
         if (pAvatarImg) {
@@ -5808,7 +6015,11 @@
         state.me.name = n;
       }
       const pick = findRandomFreeSeat(state.me.seat);
-      selectSeat(pick);
+      if (!pick) {
+        showToast('🎟️ Hiện tại rạp đã kín toàn bộ 100 ghế! Không còn ghế trống.');
+      } else {
+        selectSeat(pick);
+      }
       updateProfilePreview();
       saveProfileToStorage();
     });
@@ -6260,7 +6471,17 @@
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function sanitizeAvatarUrl(url) {
+    if (!url || typeof url !== 'string') return null;
+    const clean = url.trim();
+    if (/^(https?:\/\/|data:image\/(png|jpeg|jpg|webp|gif);base64,)/i.test(clean)) {
+      return escapeHtml(clean);
+    }
+    return null;
   }
 
   // =========================================================================

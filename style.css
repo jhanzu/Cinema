@@ -1359,7 +1359,8 @@ body.is-dragging-camera iframe,
   filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
 }
 
-.block-glasses-3d {
+.block-glasses-3d,
+.block-glasses {
   position: absolute;
   bottom: 4px;
   left: 2px;
@@ -1373,7 +1374,8 @@ body.is-dragging-camera iframe,
   align-items: center;
   box-shadow: 0 1px 3px rgba(0,0,0,0.8);
 }
-.block-glasses-3d::before {
+.block-glasses-3d::before,
+.block-glasses::before {
   content: '';
   width: 7px;
   height: 2.5px;
@@ -1381,7 +1383,8 @@ body.is-dragging-camera iframe,
   border-radius: 1px;
   box-shadow: 0 0 3px #06B6D4;
 }
-.block-glasses-3d::after {
+.block-glasses-3d::after,
+.block-glasses::after {
   content: '';
   width: 7px;
   height: 2.5px;
@@ -2726,11 +2729,13 @@ body.is-dragging-camera iframe,
 }
 
 /* Female Mannequin Hair & Accents */
-.block-mannequin.mannequin-female .block-glasses-3d::before {
+.block-mannequin.mannequin-female .block-glasses-3d::before,
+.block-mannequin.mannequin-female .block-glasses::before {
   background: #F43F5E;
   box-shadow: 0 0 4px #F43F5E;
 }
-.block-mannequin.mannequin-female .block-glasses-3d::after {
+.block-mannequin.mannequin-female .block-glasses-3d::after,
+.block-mannequin.mannequin-female .block-glasses::after {
   background: #A855F7;
   box-shadow: 0 0 4px #A855F7;
 }
@@ -2755,21 +2760,25 @@ body.is-dragging-camera iframe,
 }
 
 /* Male Mannequin Hair & Accents */
-.block-mannequin.mannequin-male .block-glasses-3d::before {
+.block-mannequin.mannequin-male .block-glasses-3d::before,
+.block-mannequin.mannequin-male .block-glasses::before {
   background: #00F2FE;
   box-shadow: 0 0 4px #00F2FE;
 }
-.block-mannequin.mannequin-male .block-glasses-3d::after {
+.block-mannequin.mannequin-male .block-glasses-3d::after,
+.block-mannequin.mannequin-male .block-glasses::after {
   background: #3B82F6;
   box-shadow: 0 0 4px #3B82F6;
 }
 
 /* Other / Prismatic Mannequin Accents */
-.block-mannequin.mannequin-other .block-glasses-3d::before {
+.block-mannequin.mannequin-other .block-glasses-3d::before,
+.block-mannequin.mannequin-other .block-glasses::before {
   background: #F59E0B;
   box-shadow: 0 0 4px #F59E0B;
 }
-.block-mannequin.mannequin-other .block-glasses-3d::after {
+.block-mannequin.mannequin-other .block-glasses-3d::after,
+.block-mannequin.mannequin-other .block-glasses::after {
   background: #10B981;
   box-shadow: 0 0 4px #10B981;
 }

@@ -81,11 +81,19 @@ function getNetworkAddresses() {
 }
 
 /**
- * Find an available seat if user's preferred seat is already taken
+ * Find an available seat if user's preferred seat is already taken.
+ * If all 100 seats are full, returns null (viewer admitted in Standing / Spectator Mode).
  */
 function assignAvailableSeat(preferredSeat, currentOccupants) {
-  const occupiedSeats = new Set(Object.values(currentOccupants).map((o) => o.seat));
-  if (preferredSeat && !occupiedSeats.has(preferredSeat)) {
+  const occupiedSeats = new Set(
+    Object.values(currentOccupants)
+      .map((o) => o.seat)
+      .filter(Boolean)
+  );
+
+  const isValidSeat = (s) => /^[A-J]([1-9]|10)$/.test(s);
+
+  if (preferredSeat && isValidSeat(preferredSeat) && !occupiedSeats.has(preferredSeat)) {
     return preferredSeat;
   }
   // Search standard prime rows (F, E, G, D, H, C, I, B, J, A)
@@ -100,7 +108,8 @@ function assignAvailableSeat(preferredSeat, currentOccupants) {
       if (!occupiedSeats.has(code)) return code;
     }
   }
-  return preferredSeat || 'E5';
+  // All 100 seats are fully occupied: admitted as Spectator (Vé đứng / Không có ghế)
+  return null;
 }
 
 /**
@@ -459,6 +468,17 @@ async function fetchMixerQueue(videoId, songTitle, count = 5) {
 }
 
 const server = http.createServer(async (req, res) => {
+  // Handle CORS preflight OPTIONS request for all routes
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+      'Access-Control-Max-Age': '86400'
+    });
+    return res.end();
+  }
+
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = decodeURIComponent(parsedUrl.pathname);
 
@@ -851,6 +871,10 @@ server.on('upgrade', (req, socket, head) => {
     handleClientDisconnect(ws);
   };
 
+  socket.on('end', () => {
+    socket.destroy();
+    handleClientDisconnect(ws);
+  });
   socket.on('close', onSocketCleanUp);
   socket.on('error', onSocketCleanUp);
 });
@@ -877,6 +901,12 @@ function handleClientMessage(ws, data) {
       if (!data.user || !data.user.id) return;
       const user = data.user;
       ws.userId = user.id;
+
+      const wasEmpty = Object.keys(roomState.occupants).length === 0;
+      if (wasEmpty && roomState.currentVideo) {
+        // First viewer entered the theater: reset film start time so they watch from beginning
+        roomState.currentVideo.startTime = Date.now();
+      }
 
       // Ensure no two people sit on the exact same seat
       const finalSeat = assignAvailableSeat(user.seat, roomState.occupants);
@@ -937,7 +967,9 @@ function handleClientMessage(ws, data) {
       const sysNotice = {
         id: 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
         type: 'system',
-        text: `👋 ${user.name} đã vào rạp Hanzu Cinema và ngồi ở ghế ${finalSeat}!`,
+        text: finalSeat
+          ? `👋 ${user.name} đã vào rạp Hanzu Cinema và ngồi ở ghế ${finalSeat}!`
+          : `👋 ${user.name} đã vào rạp Hanzu Cinema (Vé đứng - Rạp đã kín 100 ghế)!`,
         time: new Date().toTimeString().slice(0, 5)
       };
       roomState.messages.push(sysNotice);
@@ -950,6 +982,16 @@ function handleClientMessage(ws, data) {
       if (!ws.userId || !roomState.occupants[ws.userId]) return;
       const newSeat = data.seat;
       if (!newSeat) return;
+
+      // Validate seat code format (Rows A-J x Cols 1-10)
+      if (!/^[A-J]([1-9]|10)$/.test(newSeat)) {
+        ws.send({
+          type: 'SEAT_TAKEN_ERROR',
+          seat: newSeat,
+          message: `Mã ghế "${newSeat}" không hợp lệ!`
+        });
+        return;
+      }
 
       // Check if seat is already occupied by someone else
       const isTaken = Object.values(roomState.occupants).some(
@@ -1013,7 +1055,8 @@ function handleClientMessage(ws, data) {
       };
       roomState.messages.push(chatMsg);
       if (roomState.messages.length > 80) roomState.messages.shift();
-      broadcast({ type: 'CHAT_MSG', msg: chatMsg });
+      // Exclude sender so they do not receive a duplicate echo of their own message
+      broadcast({ type: 'CHAT_MSG', msg: chatMsg, userId: ws.userId }, ws);
       break;
     }
 
@@ -1153,8 +1196,13 @@ function handleClientMessage(ws, data) {
                   roomState.currentVideo.title = resTitle;
                   if (resChannel) roomState.currentVideo.channel = resChannel;
                   broadcast({
+                    type: 'CURRENT_VIDEO_UPDATE',
+                    currentVideo: roomState.currentVideo
+                  });
+                  broadcast({
                     type: 'QUEUE_UPDATE',
-                    queue: roomState.queue
+                    queue: roomState.queue,
+                    currentVideo: roomState.currentVideo
                   });
                 }
               }
@@ -1186,12 +1234,30 @@ function handleClientMessage(ws, data) {
       break;
     }
 
+    case 'VOTE_QUEUE':
     case 'VOTE_QUEUE_ITEM': {
-      if (!data.itemId) return;
-      const item = roomState.queue.find((q) => q.id === data.itemId);
-      if (item) {
-        item.votes = (item.votes || 0) + 1;
-        roomState.queue.sort((a, b) => b.votes - a.votes);
+      let changed = false;
+      if (data.itemId) {
+        const item = roomState.queue.find((q) => q.id === data.itemId);
+        if (item) {
+          if (typeof data.isUpvote === 'boolean') {
+            item.votes = data.isUpvote ? (item.votes || 0) + 1 : Math.max(0, (item.votes || 1) - 1);
+          } else {
+            item.votes = (item.votes || 0) + 1;
+          }
+          changed = true;
+        }
+      } else if (Array.isArray(data.queue)) {
+        const voteMap = new Map(data.queue.filter(q => q && q.id).map(q => [q.id, q.votes]));
+        roomState.queue.forEach((q) => {
+          if (voteMap.has(q.id)) {
+            q.votes = voteMap.get(q.id);
+            changed = true;
+          }
+        });
+      }
+      if (changed) {
+        roomState.queue.sort((a, b) => (b.votes || 0) - (a.votes || 0));
         broadcast({
           type: 'QUEUE_UPDATE',
           queue: roomState.queue
@@ -1371,11 +1437,13 @@ function handleClientMessage(ws, data) {
         // Strictly disallow pause when 2 or more people in theater
         return;
       }
-      roomState.currentVideo.isPlaying = !!data.isPlaying;
+      if (roomState.currentVideo) {
+        roomState.currentVideo.isPlaying = !!data.isPlaying;
+      }
       broadcast({
         type: 'SYNC_PLAY_PAUSE',
-        isPlaying: roomState.currentVideo.isPlaying,
-        by: data.by || roomState.occupants[ws.userId]?.name
+        isPlaying: roomState.currentVideo ? roomState.currentVideo.isPlaying : !!data.isPlaying,
+        by: data.by || (ws.userId && roomState.occupants[ws.userId]?.name) || 'Khán giả'
       }, ws);
       break;
     }
@@ -1412,20 +1480,35 @@ function handleClientDisconnect(ws) {
     roomState.skipVotes.delete(ws.userId);
 
     // Broadcast that viewer has left so their 3D chair becomes clean and empty
+    const remainingCount = Object.keys(roomState.occupants).length;
     broadcast({
       type: 'USER_LEFT',
       userId: ws.userId,
       seat: user.seat,
-      remainingCount: Object.keys(roomState.occupants).length
+      remainingCount
     });
 
-    // Update skip threshold
-    const required = getRequiredSkipVotesServer();
-    broadcast({
-      type: 'SKIP_VOTE_UPDATE',
-      votes: Array.from(roomState.skipVotes),
-      required
-    });
+    if (remainingCount === 0) {
+      // Theater is empty: clear skip votes and reset movie timer for future guests
+      roomState.skipVotes.clear();
+      if (roomState.currentVideo) {
+        roomState.currentVideo.startTime = Date.now();
+      }
+    } else {
+      // Update skip threshold
+      const required = getRequiredSkipVotesServer();
+      if (roomState.skipVotes.size >= required && roomState.queue.length > 0) {
+        const pct = Math.round((roomState.skipVotes.size / remainingCount) * 100);
+        const reason = `Đã đủ ${roomState.skipVotes.size}/${required} phiếu (${pct}% khán giả đồng ý)`;
+        advanceRoomQueue(reason);
+      } else {
+        broadcast({
+          type: 'SKIP_VOTE_UPDATE',
+          votes: Array.from(roomState.skipVotes),
+          required
+        });
+      }
+    }
   }
 }
 
