@@ -1003,7 +1003,7 @@ body.is-dragging-camera iframe,
   -webkit-backface-visibility: hidden;
 }
 
-/* 3D Row Container: Batches 10 seats into 1 row, reducing GPU compositor plane count 10x */
+/* 3D Row Container: Batches 10 empty seats into 1 row texture, reducing GPU compositor plane count 10x */
 .seat-row-3d {
   position: absolute;
   top: 0;
@@ -1012,6 +1012,7 @@ body.is-dragging-camera iframe,
   height: 56px;
   transform-style: preserve-3d;
   -webkit-transform-style: preserve-3d;
+  contain: layout style;
   pointer-events: none;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
@@ -1023,21 +1024,28 @@ body.is-dragging-camera iframe,
   left: 0;
   width: 54px;
   height: 56px;
-  transform-style: preserve-3d;
-  -webkit-transform-style: preserve-3d;
   cursor: pointer;
   contain: layout style;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
   pointer-events: auto;
 }
 
-.seat-3d-node:hover {
-  filter: brightness(1.22);
+/* Promote to 3D plane only when occupied or showing speech bubble */
+.seat-3d-node.my-seat,
+.seat-3d-node.occupied-peer,
+.seat-3d-node.has-bubble {
+  transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.seat-3d-node:hover .chair-back {
+  border-color: rgba(168, 85, 247, 0.75);
+  background: linear-gradient(180deg, #32363c 0%, #1d1f23 100%);
 }
 
 /* ==========================================================================
-   Ultra-Streamlined Cinema Chair Model (Zero-DOM Armrests, 60+ FPS)
+   Ultra-Streamlined Cinema Chair Model (Zero-DOM Armrests, Zero-Shadow Empty Chairs, 60+ FPS)
    ========================================================================== */
 
 /* 1. Sleek Armrests merged into CSS ::before and ::after pseudo-elements */
@@ -1052,7 +1060,6 @@ body.is-dragging-camera iframe,
   border-radius: 3px;
   background: linear-gradient(180deg, #303330 0%, #181918 100%);
   border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
   box-sizing: border-box;
   pointer-events: none;
 }
@@ -1069,11 +1076,10 @@ body.is-dragging-camera iframe,
   border-radius: 9px 9px 3px 3px;
   background: linear-gradient(180deg, #262926 0%, #171817 60%, #0f100f 100%);
   border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.85);
+  border-bottom: 3px solid #090a09;
   display: flex;
   align-items: center;
   justify-content: center;
-  transform: translateZ(4px);
   box-sizing: border-box;
   font-size: 0.65rem;
   font-family: var(--font-mono);
@@ -1089,27 +1095,24 @@ body.is-dragging-camera iframe,
   color: inherit;
 }
 
-/* 3. Plush Cushion Base */
+/* 3. Plush Cushion Base (Flat 2D projection avoids 100 extra 3D layers) */
 .chair-cushion {
   position: absolute;
-  bottom: 8px;
+  bottom: 5px;
   left: 6px;
   width: 42px;
-  height: 22px;
-  border-radius: 4px;
+  height: 11px;
+  border-radius: 3px 3px 5px 5px;
   background: linear-gradient(180deg, #242724 0%, #161716 100%);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  transform: translateY(4px) rotateX(75deg);
-  transform-origin: bottom center;
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.7);
+  border-bottom: 2px solid #090a09;
   box-sizing: border-box;
 }
 
 /* VIP Rows E & F Gold Trim */
 .seat-3d-node.vip-seat .chair-back {
-  border-color: rgba(245, 158, 11, 0.55);
+  border-color: rgba(245, 158, 11, 0.7);
   background: linear-gradient(180deg, #3d321d 0%, #201a0e 100%);
-  box-shadow: 0 0 14px rgba(245, 158, 11, 0.28);
   color: #FBBF24;
 }
 .seat-3d-node.vip-seat .chair-cushion {
@@ -3363,6 +3366,37 @@ body.is-dragging-camera .seat-speech-bubble {
   border-color: #60A5FA !important;
   color: #EFF6FF !important;
   box-shadow: 0 0 14px rgba(59, 130, 246, 0.5) !important;
+}
+
+/* ==========================================================================
+   SOLO SINGLE-SONG LOOP TOGGLE
+   ========================================================================== */
+.yt-btn.yt-loop-btn.active {
+  background: rgba(168, 85, 247, 0.28) !important;
+  border-color: rgba(192, 132, 252, 0.72) !important;
+  color: #F3E8FF !important;
+  box-shadow: 0 0 14px rgba(168, 85, 247, 0.45) !important;
+}
+
+.ctrl-btn.loop-toggle {
+  background: rgba(139, 92, 246, 0.14);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  color: #DDD6FE;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ctrl-btn.loop-toggle:hover {
+  background: rgba(139, 92, 246, 0.28);
+  border-color: rgba(192, 132, 252, 0.6);
+  color: #FFF;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.35);
+}
+
+.ctrl-btn.loop-toggle.active {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.48), rgba(168, 85, 247, 0.62)) !important;
+  border-color: #C084FC !important;
+  color: #FAF5FF !important;
+  box-shadow: 0 0 14px rgba(168, 85, 247, 0.55) !important;
 }
 
 /* Permanently hide legacy btnOpenSettings if present in DOM or cached templates */

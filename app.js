@@ -247,6 +247,8 @@
     autoSkipAds: localStorage.getItem('hanzu_cinema_auto_skip_ads') !== 'false',
     // Personal Subtitles / Closed Captions State (Local client-only, does not affect others)
     subtitlesEnabled: localStorage.getItem('hanzu_subtitles_enabled') === '1',
+    // Solo Single-Song Loop State (Active only when theater has 1 viewer)
+    loopSingle: localStorage.getItem('hanzu_cinema_loop_single') === '1',
     isAdPlaying: false,
     skippedAdsCount: 0,
     lastAdBypassTime: 0,
@@ -532,6 +534,9 @@
                           </div>
 
                           <div class="yt-hud-right">
+                            <button class="yt-btn yt-loop-btn ${state.loopSingle ? 'active' : ''}" id="btnScreenLoopSingle" type="button" title="Lặp lại 1 bài hiện tại (Chỉ dùng khi rạp 1 người - Phím R)">
+                              <span id="screenLoopLabel">${state.loopSingle ? '🔂 Lặp: BẬT' : '🔂 Lặp'}</span>
+                            </button>
                             <button class="yt-btn yt-cc-btn ${state.subtitlesEnabled ? 'active' : ''}" id="btnScreenToggleSubtitles" type="button" title="Bật / Tắt phụ đề cá nhân (Phím C)">
                               <span id="screenSubtitlesLabel">${state.subtitlesEnabled ? '💬 Phụ đề: BẬT' : '💬 Phụ đề: TẮT'}</span>
                             </button>
@@ -573,6 +578,9 @@
                 <span id="volumeValueLabel" class="volume-label">${state.volume}%</span>
                 <button class="ctrl-btn vote-skip" id="btnVoteSkip" title="Bỏ phiếu chuyển sang video #1 trong hàng đợi (Cần 30% khán giả vote)">
                   ⏭️ Qua bài (<span id="skipVoteCounter">0/1</span>)
+                </button>
+                <button class="ctrl-btn loop-toggle ${state.loopSingle ? 'active' : ''}" id="btnDockLoopSingle" title="Lặp lại 1 bài hiện tại (Chỉ dùng khi rạp 1 người - Phím R)">
+                  <span id="dockLoopLabel">${state.loopSingle ? '🔂 Lặp 1 bài: BẬT' : '🔂 Lặp 1 bài'}</span>
                 </button>
                 <button class="ctrl-btn" id="btnResetCamera" title="Đặt lại góc nhìn chuẩn">
                   🎯 Căn giữa
@@ -984,11 +992,9 @@
 
         seatCoordMap[seatCode] = { x, y: 0, z, rIdx, cIdx, rowLetter, colNum };
 
-        // Ultra-streamlined chair (4 DOM elements, armrests via CSS ::before/::after, max FPS)
+        // Flat empty chair (2 DOM nodes, positioned via left:px so all 10 chairs share 1 row plane)
         seatsHtml += `
-          <div class="seat-3d-node ${isVipRow ? 'vip-seat' : ''}" id="seat-3d-${seatCode}" data-seat="${seatCode}" style="transform:translate3d(${x}px,0,0)" title="Ghế ${seatCode}${isVipRow ? ' (VIP)' : ''} — Click để ngồi">
-            <div class="chair-name-badge" id="chair-badge-${seatCode}"></div>
-            <div class="seat-avatar-slot" id="avatar-slot-${seatCode}"></div>
+          <div class="seat-3d-node ${isVipRow ? 'vip-seat' : ''}" id="seat-3d-${seatCode}" data-seat="${seatCode}" style="left:${x}px" title="Ghế ${seatCode}${isVipRow ? ' (VIP)' : ''} — Click để ngồi">
             <div class="chair-back">${seatCode}</div>
             <div class="chair-cushion"></div>
           </div>`;
@@ -999,7 +1005,7 @@
 
     container.innerHTML = rowsHtml;
 
-    // Fast cache population for differential DOM updater
+    // Fast cache population for differential DOM updater (badge/slot mounted lazily only when occupied)
     ROWS.forEach((r) => {
       COLS.forEach((c) => {
         const code = `${r}${c}`;
@@ -1007,8 +1013,8 @@
         if (node) {
           seatNodeCache[code] = {
             node3D: node,
-            slot: node.querySelector('.seat-avatar-slot'),
-            badge: node.querySelector('.chair-name-badge')
+            slot: null,
+            badge: null
           };
         }
       });
@@ -1123,8 +1129,7 @@
         const code = `${rowLetter}${colNum}`;
         const cached = seatNodeCache[code];
         const node3D = cached ? cached.node3D : document.getElementById(`seat-3d-${code}`);
-        const slot = cached ? cached.slot : document.getElementById(`avatar-slot-${code}`);
-        if (!node3D || !slot) return;
+        if (!node3D) return;
 
         const person = occupants[code];
         const bubble = state.seatBubbles[code];
@@ -1141,76 +1146,107 @@
         node3D.dataset.cachedBubbleKey = bubbleKey;
 
         node3D.classList.remove('occupied', 'my-seat', 'occupied-peer');
-        const chairBadgeEl = cached ? cached.badge : document.getElementById(`chair-badge-${code}`);
-        if (person) {
-          if (person.isMe) {
-            node3D.classList.add('my-seat');
-            node3D.title = `Ghế ${code} của bạn (${person.name}) • Nhấp để đứng/đổi ghế`;
-            const cleanAvatar = sanitizeAvatarUrl(person.avatar);
-            if (chairBadgeEl) {
-              chairBadgeEl.className = 'chair-name-badge my-badge';
-              const avTagMy = cleanAvatar ? `<img src="${cleanAvatar}" class="chair-badge-avatar" />` : `<span style="font-size:0.74rem;">${person.emoji || '😎'}</span>`;
-              chairBadgeEl.innerHTML = `${avTagMy} <span>${escapeHtml(person.name)}</span> <span class="cnb-tag" style="color:#FDE047;font-size:0.65rem;font-weight:700;margin-left:2px;">(Bạn)</span>`;
-              chairBadgeEl.style.display = 'inline-flex';
-            }
-          } else {
-            node3D.classList.add('occupied', 'occupied-peer');
-            node3D.title = `Ghế ${code} — Đã có "${person.name}" ngồi (Không thể chọn)`;
-            const cleanAvatar = sanitizeAvatarUrl(person.avatar);
-            if (chairBadgeEl) {
-              chairBadgeEl.className = 'chair-name-badge peer-badge';
-              const avTagPeer = cleanAvatar ? `<img src="${cleanAvatar}" class="chair-badge-avatar" />` : `<span style="font-size:0.74rem;">${person.emoji || '👤'}</span>`;
-              chairBadgeEl.innerHTML = `${avTagPeer} <span>${escapeHtml(person.name)}</span>`;
-              chairBadgeEl.style.display = 'inline-flex';
-            }
-          }
-          const bubbleHtml = bubble
-            ? `<div class="seat-speech-bubble">${escapeHtml(bubble.text)}</div>`
-            : '';
-          const gender = person.gender || 'male';
-          const genderIcon = gender === 'female' ? '👩' : (gender === 'other' ? '✨' : '👨');
-          const hairHtml = gender === 'female' ? '<div class="block-hair-female"></div>' : '';
-          const cleanAvatar = sanitizeAvatarUrl(person.avatar);
+        node3D.classList.toggle('has-bubble', !!bubble);
 
-          slot.innerHTML = `
-            ${bubbleHtml}
-            <div class="block-mannequin mannequin-${gender} ${person.isMe ? 'is-me' : 'is-peer'}" style="--char-color:${person.color || '#3B82F6'}">
-              <div class="mannequin-nametag">
-                <span class="mannequin-gender">${genderIcon}</span>
-                ${cleanAvatar ? `<img src="${cleanAvatar}" class="mannequin-avatar-img" />` : `<span class="mannequin-emoji">${person.emoji || '😎'}</span>`}
-                <span class="mannequin-name">${escapeHtml(person.name)}</span>
-              </div>
-              <div class="block-head-wrap">
-                ${hairHtml}
-                <div class="block-head">
-                  ${cleanAvatar ? `<div class="block-face block-face-photo-wrap"><img src="${cleanAvatar}" class="block-face-photo" /></div>` : `<div class="block-face">${person.emoji || '😎'}</div>`}
-                  <div class="block-glasses-3d"></div>
+        if (person || bubble) {
+          let slot = (cached && cached.slot) || document.getElementById(`avatar-slot-${code}`);
+          if (!slot) {
+            slot = document.createElement('div');
+            slot.className = 'seat-avatar-slot';
+            slot.id = `avatar-slot-${code}`;
+            node3D.prepend(slot);
+            if (cached) cached.slot = slot;
+          }
+
+          let chairBadgeEl = (cached && cached.badge) || document.getElementById(`chair-badge-${code}`);
+          if (person && !chairBadgeEl) {
+            chairBadgeEl = document.createElement('div');
+            chairBadgeEl.className = 'chair-name-badge';
+            chairBadgeEl.id = `chair-badge-${code}`;
+            node3D.prepend(chairBadgeEl);
+            if (cached) cached.badge = chairBadgeEl;
+          }
+
+          if (person) {
+            if (person.isMe) {
+              node3D.classList.add('my-seat');
+              node3D.title = `Ghế ${code} của bạn (${person.name}) • Nhấp để đứng/đổi ghế`;
+              const cleanAvatar = sanitizeAvatarUrl(person.avatar);
+              if (chairBadgeEl) {
+                chairBadgeEl.className = 'chair-name-badge my-badge';
+                const avTagMy = cleanAvatar ? `<img src="${cleanAvatar}" class="chair-badge-avatar" />` : `<span style="font-size:0.74rem;">${person.emoji || '😎'}</span>`;
+                chairBadgeEl.innerHTML = `${avTagMy} <span>${escapeHtml(person.name)}</span> <span class="cnb-tag" style="color:#FDE047;font-size:0.65rem;font-weight:700;margin-left:2px;">(Bạn)</span>`;
+                chairBadgeEl.style.display = 'inline-flex';
+              }
+            } else {
+              node3D.classList.add('occupied', 'occupied-peer');
+              node3D.title = `Ghế ${code} — Đã có "${person.name}" ngồi (Không thể chọn)`;
+              const cleanAvatar = sanitizeAvatarUrl(person.avatar);
+              if (chairBadgeEl) {
+                chairBadgeEl.className = 'chair-name-badge peer-badge';
+                const avTagPeer = cleanAvatar ? `<img src="${cleanAvatar}" class="chair-badge-avatar" />` : `<span style="font-size:0.74rem;">${person.emoji || '👤'}</span>`;
+                chairBadgeEl.innerHTML = `${avTagPeer} <span>${escapeHtml(person.name)}</span>`;
+                chairBadgeEl.style.display = 'inline-flex';
+              }
+            }
+            const bubbleHtml = bubble
+              ? `<div class="seat-speech-bubble">${escapeHtml(bubble.text)}</div>`
+              : '';
+            const gender = person.gender || 'male';
+            const genderIcon = gender === 'female' ? '👩' : (gender === 'other' ? '✨' : '👨');
+            const hairHtml = gender === 'female' ? '<div class="block-hair-female"></div>' : '';
+            const cleanAvatar = sanitizeAvatarUrl(person.avatar);
+
+            slot.innerHTML = `
+              ${bubbleHtml}
+              <div class="block-mannequin mannequin-${gender} ${person.isMe ? 'is-me' : 'is-peer'}" style="--char-color:${person.color || '#3B82F6'}">
+                <div class="mannequin-nametag">
+                  <span class="mannequin-gender">${genderIcon}</span>
+                  ${cleanAvatar ? `<img src="${cleanAvatar}" class="mannequin-avatar-img" />` : `<span class="mannequin-emoji">${person.emoji || '😎'}</span>`}
+                  <span class="mannequin-name">${escapeHtml(person.name)}</span>
+                </div>
+                <div class="block-head-wrap">
+                  ${hairHtml}
+                  <div class="block-head">
+                    ${cleanAvatar ? `<div class="block-face block-face-photo-wrap"><img src="${cleanAvatar}" class="block-face-photo" /></div>` : `<div class="block-face">${person.emoji || '😎'}</div>`}
+                    <div class="block-glasses-3d"></div>
+                  </div>
+                </div>
+                <div class="block-torso">
+                  <div class="block-torso-front"></div>
+                </div>
+                <div class="block-arm left"></div>
+                <div class="block-arm right"></div>
+                <div class="block-leg left">
+                  <div class="leg-thigh"></div>
+                  <div class="leg-shin"></div>
+                </div>
+                <div class="block-leg right">
+                  <div class="leg-thigh"></div>
+                  <div class="leg-shin"></div>
                 </div>
               </div>
-              <div class="block-torso">
-                <div class="block-torso-front"></div>
-              </div>
-              <div class="block-arm left"></div>
-              <div class="block-arm right"></div>
-              <div class="block-leg left">
-                <div class="leg-thigh"></div>
-                <div class="leg-shin"></div>
-              </div>
-              <div class="block-leg right">
-                <div class="leg-thigh"></div>
-                <div class="leg-shin"></div>
-              </div>
-            </div>
-          `;
+            `;
+          } else {
+            node3D.title = `Ghế ${code} (Trống - Nhấp để ngồi)`;
+            if (chairBadgeEl) {
+              chairBadgeEl.remove();
+              if (cached) cached.badge = null;
+            }
+            slot.innerHTML = `<div class="seat-speech-bubble">${escapeHtml(bubble.text)}</div>`;
+          }
         } else {
           node3D.title = `Ghế ${code} (Trống - Nhấp để ngồi)`;
-          if (chairBadgeEl) {
-            chairBadgeEl.innerHTML = '';
-            chairBadgeEl.style.display = 'none';
+          const slot = (cached && cached.slot) || document.getElementById(`avatar-slot-${code}`);
+          const chairBadgeEl = (cached && cached.badge) || document.getElementById(`chair-badge-${code}`);
+          if (slot) {
+            slot.remove();
+            if (cached) cached.slot = null;
           }
-          slot.innerHTML = bubble
-            ? `<div class="seat-speech-bubble">${escapeHtml(bubble.text)}</div>`
-            : '';
+          if (chairBadgeEl) {
+            chairBadgeEl.remove();
+            if (cached) cached.badge = null;
+          }
         }
       });
     });
@@ -1262,11 +1298,12 @@
         : 'Nhắn gì đó vào phòng chiếu...';
     }
 
-    if (state.activeTab === 'seats' || document.getElementById('seatGrid2D')) {
+    if (state.activeTab === 'seats') {
       render2DSeatMap(occupants);
     }
     updateSkipVoteUI();
     updatePlayPauseButton();
+    updateLoopSingleUI();
     updateMixerQueueVisibility();
     updateSoloQueueToolbar();
   }
@@ -2773,6 +2810,22 @@
       state.isHandlingVideoEnd = false;
     }, 2000);
 
+    if (state.loopSingle && isSoloTheater() && state.currentVideo && state.currentVideo.videoId) {
+      try {
+        if (ytReady && ytPlayer && typeof ytPlayer.seekTo === 'function') {
+          ytPlayer.seekTo(0, true);
+          if (typeof ytPlayer.playVideo === 'function') ytPlayer.playVideo();
+          state.isPlaying = true;
+          updatePlayPauseButton();
+          showToast(`🔂 Đang phát lại: ${state.currentVideo.title || 'video hiện tại'}`);
+          broadcastSync({ type: 'SYNC_SEEK', time: 0, by: state.me.name });
+          return;
+        }
+      } catch (_) {}
+      loadAndPlayVideo(state.currentVideo, false, 0);
+      return;
+    }
+
     if (state.queue && state.queue.length > 0) {
       playNextFromQueue('Video đã kết thúc');
     } else {
@@ -2988,6 +3041,53 @@
     if (overlay) {
       overlay.classList.toggle('is-paused', !state.isPlaying);
     }
+  }
+
+  function isSoloTheater() {
+    return getAllOccupantsList().length <= 1;
+  }
+
+  function updateLoopSingleUI() {
+    const isSolo = isSoloTheater();
+    if (!isSolo && state.loopSingle) {
+      state.loopSingle = false;
+      localStorage.setItem('hanzu_cinema_loop_single', '0');
+      showToast('👥 Có người khác vào rạp — Đã tự động tắt Lặp 1 bài để phát chung hàng đợi.');
+    }
+
+    const dockBtn = document.getElementById('btnDockLoopSingle');
+    const screenBtn = document.getElementById('btnScreenLoopSingle');
+    const dockLabel = document.getElementById('dockLoopLabel');
+    const screenLabel = document.getElementById('screenLoopLabel');
+
+    [dockBtn, screenBtn].forEach((btn) => {
+      if (!btn) return;
+      btn.style.display = isSolo ? '' : 'none';
+      btn.classList.toggle('active', isSolo && !!state.loopSingle);
+    });
+
+    if (dockLabel) {
+      dockLabel.textContent = state.loopSingle ? '🔂 Lặp 1 bài: BẬT' : '🔂 Lặp 1 bài';
+    }
+    if (screenLabel) {
+      screenLabel.textContent = state.loopSingle ? '🔂 Lặp: BẬT' : '🔂 Lặp';
+    }
+  }
+
+  function toggleLoopSingle() {
+    if (!isSoloTheater()) {
+      showToast('🔒 Tính năng Lặp 1 bài chỉ khả dụng khi rạp có 1 mình bạn!');
+      return;
+    }
+    state.loopSingle = !state.loopSingle;
+    localStorage.setItem('hanzu_cinema_loop_single', state.loopSingle ? '1' : '0');
+    updateLoopSingleUI();
+    showToast(
+      state.loopSingle
+        ? '🔂 Đã BẬT lặp lại 1 bài hiện tại (Rạp 1 người)'
+        : '➡️ Đã TẮT lặp 1 bài (Chuyển bài tiếp theo khi hết)'
+    );
+    showRippleBadge('🔂', state.loopSingle ? 'Lặp 1 bài: BẬT' : 'Lặp 1 bài: TẮT', 'center');
   }
 
   function updateNextPlayingUI() {
@@ -4234,20 +4334,6 @@
       });
     });
     grid.innerHTML = cellsHtml;
-
-    // Direct click listeners on all 2D seat cells for immediate seat change
-    grid.querySelectorAll('.seat-cell-2d').forEach((cell) => {
-      cell.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const targetSeat = cell.getAttribute('data-seat') || cell.getAttribute('data-seat-2d');
-        if (!targetSeat) return;
-        if (targetSeat === state.me.seat) {
-          showToast(`💺 Bạn đang ngồi ở ghế ${targetSeat} rồi!`);
-          return;
-        }
-        selectSeat(targetSeat);
-      });
-    });
 
     const allPeople = getAllOccupantsList();
     const seatedCount = allPeople.filter((p) => p.seat).length;
@@ -5589,6 +5675,16 @@
       }
     });
 
+    // Solo Single-Song Loop Toggle Buttons
+    document.getElementById('btnScreenLoopSingle')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleLoopSingle();
+    });
+    document.getElementById('btnDockLoopSingle')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleLoopSingle();
+    });
+
     // Personal Subtitles Toggle Buttons
     document.getElementById('btnScreenToggleSubtitles')?.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -6366,6 +6462,8 @@
         setCameraMode(state.cameraMode === 'pov' ? 'orbit' : 'pov');
       } else if (e.key === 'm' || e.key === 'M') {
         document.getElementById('btnMuteToggle')?.click();
+      } else if (e.key === 'r' || e.key === 'R') {
+        toggleLoopSingle();
       } else if (['1', '2', '3', '4', '5', '6'].includes(e.key)) {
         if (e.repeat) return; // Prevent key-hold repeat spam
         const emojis = ['🍿', '❤️', '🪄', '🔥', '👏', '😂'];
@@ -6532,6 +6630,7 @@
     setupSyncListener();
     startSimulatedAudienceEngine();
     updateSkipVoteUI();
+    updateLoopSingleUI();
     startAutoAdSkipperEngine();
     updateAutoSkipAdsUI();
     startFpsMonitor();
